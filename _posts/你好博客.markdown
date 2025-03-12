@@ -1,0 +1,16 @@
+---
+layout:     post
+title:      "Hello 2025"
+subtitle:   " \"Hello World, Hello Blog\""
+date:       2025-03-12 12:00:00
+author:     "Yellowsoy"
+header-img: "img/post-bg-2015.jpg"
+catalog: true
+tags:
+    - 模板
+---
+> “Yeah It's on. ”
+
+忍黄豆 的 Blog 就这么开通了。
+
+<p id = "build"></p>
