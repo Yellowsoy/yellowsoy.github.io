@@ -2,7 +2,10 @@
 layout: page
 description: "「离开世界之前 一切都是过程」"
 ---
-
+ <head>
+  <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
+<script>LA.init({id:"3LXPUUbbZBfql09x",ck:"3LXPUUbbZBfql09x",autoTrack:true,hashMode:true,screenRecord:true})</script>
+ </head>
 {% for post in paginator.posts %}
 <div class="post-preview">
     <a href="{{ post.url | prepend: site.baseurl }}">
@@ -23,7 +26,7 @@ description: "「离开世界之前 一切都是过程」"
         </div>
     </a>
     <p class="post-meta">
-        Posted by {% if post.author %}{{ post.author }}{% else %}{{ site.title }}{% endif %} on {{ post.date | date: "%B %-d, %Y" }}
+       <script id="LA-DATA-WIDGET" crossorigin="anonymous" charset="UTF-8" src="https://v6-widget.51.la/v6/3LXPUUbbZBfql09x/quote.js?theme=#1690FF,#333333,#999999,#333333,#FFFFFF,#1690FF,14&f=14&display=1,0,1,1,0,0,0,1"></script>
     </p>
 </div>
 <hr>
