@@ -4,7 +4,7 @@ SEOTitle: 忍黄豆的博客 | Yellowsoy Blog
 header-img: img/home-bg.jpg
 email: rhd100@qq.com
 description: "这里是 @忍黄豆 的个人博客，与你一起发现更大的世界 | 做一个有道德，有修养的人"
-keyword: "Blog, 博客, 个人网站, 互联网, Web, JavaScript, React, React Native, 前端, 设计"
+keyword: "Blog, 博客, 个人网站, 互联网, Web, 前端, 设计"
 url: "https://516696.xyz/" # your host, for absolute URL
 baseurl: "" # for example, '/blog' if your blog hosted on 'host/blog'
 
@@ -74,7 +74,7 @@ netease_comment: false
 
 # Sidebar settings
 sidebar: true # whether or not using Sidebar.
-sidebar-about-description: "做一个有道德，有修养的人 <br> 忍黄豆"
+sidebar-about-description: "做一个有教养，懂事理的普通人 <br> 忍黄豆"
 sidebar-avatar: https://github.com/Yellowsoy/yellowsoy.github.io/blob/master/img/logo.png?raw=true # use absolute URL, seeing it's used in both `/` and `/about/`
 
 # Featured Tags
