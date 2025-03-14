@@ -1,0 +1,546 @@
+---
+layout:     post
+title:      "天气查询系统"
+subtitle:   " \"大学作业分享\""
+date:       2025-03-14 18:00:00
+author:     "Yellowsoy"
+header-img: "img/post-bg-2015.jpg"
+catalog: false
+tags:
+    - 编程
+---
+> 大学的期末作业，结合了网上很多大佬的代码，直接修改整合了一下。
+> 我们老师要求代码要200行，所以写了很多。也顺便分享给各位需要交作业的同学。
+
+天气数据接口使用了“心知天气”
+会查询最近的天气数据并且发送到邮箱和推送的微信，微信推送用的是pushplus
+
+![1741946644242](image/2025-03-13/1741946644242.png)
+
+![](https://attach.52pojie.cn/forum/202401/21/100909jrieqlnaiiqtqnjp.png)
+
+```python
+import json
+import requests
+import datetime
+import cn2an
+import smtplib
+from email.mime.text import MIMEText
+from email.header import Header
+from tkinter import messagebox# 引入弹窗库，防止解释器弹出报错。
+from tkinter import *
+ 
+ 
+# GUI
+root = Tk()
+# 文本
+location_text = Text(root, width=25, height=2, font=("楷体", 15)) # 查询城市
+location_text.insert("1.0", "请输入市级地址\n（默认为当前IP地址）")
+location_text.grid(row=0, column=1)
+email1 = Text(root, width=25, height=2, font=("楷体", 15))# 接收邮箱
+email1.insert("1.0", "请输入接收邮箱\n（多个邮箱请用,分割）")
+email1.grid(row=1, column=1)
+pushplus_text = Text(root, width=25, height=2, font=("楷体", 15))# pushplus
+pushplus_text.insert("1.0", "请输入pushplus的token")
+pushplus_text.grid(row=2, column=1)
+url_head = "https://api.seniverse.com/v3/weather/daily.json?"
+key = "天气秘钥"
+# ---------------------------------#
+def get_weather(locat_name):
+    global emailname , token1 # 声明是全局变量
+    # 默认为的值
+    if locat_name == "\n" or locat_name == "请输入市级地址\n（默认为当前IP地址）\n":
+        locat_name = "ip"
+    locat_name = locat_name.replace("\n", "")  # 去掉自带的换行
+    if emailname == "\n" or emailname == "请输入接收邮箱\n（多个邮箱请用,分割）\n":
+        emailname = "\n"
+    emailname = emailname.replace("\n", "")  # 去掉自带的换行
+    if token1 == "\n" or token1 == "请输入pushplus的token\n":
+        token1 = '\n'
+    token1 = token1.replace("\n", "")  # 去掉自带的换行
+    # 整合url
+    url = url_head + "key=" + key + "&" + "location=" + locat_name + "&" + "language=zh-Hans&unit=c&start=0&days=5"
+    # 获取天气数据
+    resq = requests.get(url)
+ 
+    if resq.status_code == 200:
+        val_data = resq.text
+        weather_data = json.loads(val_data)
+ 
+        locat = weather_data['results'][0]['location']['name']
+        timezone = weather_data['results'][0]['location']['timezone']
+        timezone_offset = weather_data['results'][0]['location']['timezone_offset']
+ 
+        print("==========================")
+        print("")
+ 
+        print("地区：", locat)
+        print("时区：", timezone)
+        print("时区偏移：", timezone_offset)
+        print("")
+ 
+        weath_cn = 0  # 天气序号
+        daily = weather_data['results'][0]['daily']
+        while weath_cn < len(daily):
+            daily_d = daily[weath_cn]
+            with open(locat + daily_d['date']+'天气.txt', 'w') as file:
+                    print("")
+                    print("--------")
+                    print("时间：", daily_d['date'])
+                    print("天气：", daily_d['text_day'])
+                    print("今日最高温度(℃):", daily_d['high'])
+                    print("今日最低温度(℃):", daily_d['low'])
+                    print("湿度(%):", daily_d['humidity'])
+                    print("风向:", daily_d['wind_direction'])
+ 
+                    print("风速(km/h):", daily_d['wind_speed'])
+                    print("风向角度(0~360):", daily_d['wind_direction_degree'])
+                    print("风力等级:", daily_d['wind_scale'])
+                    print("降水量(mm):", daily_d['rainfall'])
+                    # 打开文件以写入模式
+                    file.write("时间：" + daily_d['date'] + "\n")
+                    file.write("天气：" + daily_d['text_day'] + "\n")
+                    file.write("今日最高温度(℃):" + str(daily_d['high']) + "\n")
+                    file.write("今日最低温度(℃):" + str(daily_d['low']) + "\n")
+                    file.write("湿度(%)：" + str(daily_d['humidity']) + "\n")
+                    file.write("风向:" + daily_d['wind_direction'] + "\n")
+                    file.write("风速(km/h):" + str(daily_d['wind_speed']) + "\n")
+                    file.write("风向角度(0~360):" + str(daily_d['wind_direction_degree']) + "\n")
+                    file.write("风力等级:" + daily_d['wind_scale'] + "\n")
+                    file.write("降水量(mm):" + str(daily_d['rainfall']) + "\n")
+                    weath_cn += 1
+ 
+        print("")
+ 
+        print("最后更新于:", weather_data['results'][0]['last_update'])
+        print("")
+        print("==========================")
+ 
+        # API接口请求
+        params = {
+            "key": "天气密钥",
+            "location": locat_name,
+            "language": "zh-Hans",
+            "unit": "c",
+        }
+ 
+        # 基本天气
+        url = "https://api.seniverse.com/v3/weather/now.json"
+        # 获取数据
+        r = requests.get(url, params=params)
+        # 解析数据
+        data = r.json()["results"]
+        address = data[0]["location"]['path']  # 地点
+        temperature = data[0]['now']["temperature"]  # 现在温度
+        text = data[0]['now']["text"]  # 现在天气情况
+        last_update = data[0]["last_update"]
+ 
+        # 生活指数
+        url = "https://api.seniverse.com/v3/life/suggestion.json"
+        # 获取数据
+        r1 = requests.get(url, params=params)
+        # 解析数据
+        data = r1.json()["results"]
+        car = data[0]["suggestion"]['car_washing']["brief"]  # 洗车
+        dressing = data[0]["suggestion"]['dressing']["brief"]  # 穿衣
+        flu = data[0]["suggestion"]['flu']["brief"]  # 感冒
+        sport = data[0]["suggestion"]['sport']["brief"]  # 运动
+        travel = data[0]["suggestion"]['travel']["brief"]  # 旅行建议
+        uv = data[0]["suggestion"]['uv']["brief"]  # 紫外线情况
+ 
+        # 日期
+        date = datetime.date.today().strftime("%Y-%m-%d")
+        # 星期几
+        weekday = datetime.date.today().weekday() + 1
+        # 用cn2an包将阿拉伯数字转为中文数字
+        weekday = cn2an.an2cn(weekday)
+ 
+        # 显示消息
+        message = f"日期：{date} 周{weekday}   " + address + "    天气：\n" + \
+                  "现在温度：" + temperature + "℃" + \
+                  "\n现在天气情况：" + text + \
+                  "\n" \
+                  "\n洗车建议：" + car + \
+                  "\n穿衣建议：" + dressing + \
+                  "\n感冒情况：" + flu + \
+                  "\n运动建议：" + sport + \
+                  "\n旅行建议：" + travel + \
+                  "\n紫外线情况：" + uv + \
+                  "\n数据更新时间：" + last_update
+        print(message)
+ 
+        # 发送邮件
+        def send_email(subject, email_content, toaddr=emailname):
+            # 发件人邮箱账号
+            fromaddr = '123qq.com'
+            # 发件人邮箱密码
+            passwd = 'QQ邮箱需要申请授权码'
+            server = smtplib.SMTP_SSL('smtp.qq.com', port=465)
+            server.login(fromaddr, passwd)
+            message = MIMEText(email_content, 'plain', 'utf-8')
+            message['From'] = 123 <123@qq.com>'
+            message['To'] = toaddr
+            message['Subject'] = Header(subject, 'utf-8')
+            receiver = message['To'].split(';')
+            server.sendmail(fromaddr, receiver, message.as_string())
+            server.quit()
+ 
+        send_email(locat+f"{date} 周{weekday}"  +"   的天气情况", message)
+        print("\n\n邮件发送成功")
+ 
+        # 微信公众号推送天气
+        def send_wechat(message):
+            token = token1
+            title =locat+'   的天气'
+            content = message
+            template = 'html'
+            url = f"https://www.pushplus.plus/send?token={token}&title={title}&content={content}&template={template}"
+            r = requests.get(url=url)
+ 
+        if __name__ == '__main__':
+            msg = 'Life is short I use python'
+            send_wechat(message)
+        print("微信公众号推送成功")
+ 
+        messagebox.showinfo(title='天气获取成功',
+                            message=f"{date} 周{weekday}" + "   " + locat + " 天气获取成功\n未来三天天气已保存为TXT文件"
+                                                                            "\r邮件已发送给" + emailname + "\r微信已推送送给" + token1)  # 消息提醒弹窗，点击确定返回值为 ok
+    else:
+        print(resq.status_code)
+def start_request():
+    text = location_text.get("1.0", "end")
+    print(text)
+    global emailname , token1 # 声明是全局变量
+    emailname = email1.get("1.0", "end")
+    token1 = pushplus_text.get("1.0", "end")
+ 
+    # 获取天气
+    get_weather(text)
+def info_request():
+    messagebox.showinfo(title="提示",
+                        message="未来3天天气状况会保存为TXT文件~\r不输入为默认值\r\n仅限市级城市呀😊  \r作者：忍黄豆  ")
+ 
+def init_gui():
+    root.geometry("380x150+750+400")
+    root.title("—天气获取工具😀—  ")
+    start_button = Button(root, text="获 取", anchor='w', font=("楷体", 15), command=start_request)
+    start_button.grid(row=0, column=0)
+    info_button = Button(root, text="关 于", anchor='w', font=("楷体", 15), command=info_request)
+    info_button.grid(row=1, column=0)
+ 
+def main():
+    init_gui()
+    root.mainloop()
+ 
+main()
+```
+
+
+**下面这个是有注释的，用AI生成的注释。**
+
+```python
+import datetime  # 导入时间处理模块
+import json  # 导入JSON处理模块
+import smtplib  # 导入SMTP邮件发送模块
+from email.header import Header  # 导入邮件头部处理模块
+from email.mime.text import MIMEText  # 导入邮件内容处理模块
+from tkinter import *  # 导入tkinter模块，用于创建GUI界面
+from tkinter import messagebox  # 导入弹窗库，防止解释器弹出报错。
+ 
+import cn2an  # 导入中文到拼音转换模块
+import requests  # 导入HTTP请求模块
+    '''
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    本代码仅作为程序运行注，非运行代码！！！
+    '''
+ 
+# GUI
+# 创建一个Tkinter根窗口对象
+root = Tk()
+ 
+# 文本
+location_text = Text(root, width=25, height=2, font=("楷体", 15)) # 查询城市
+location_text.insert("1.0", "请输入市级地址\n（默认为当前IP地址）")
+location_text.grid(row=0, column=1)
+ 
+email1 = Text(root, width=25, height=2, font=("楷体", 15)) # 接收邮箱
+email1.insert("1.0", "请输入接收邮箱\n（多个邮箱请用,分割）")
+email1.grid(row=1, column=1)
+ 
+pushplus_text = Text(root, width=25, height=2, font=("楷体", 15)) # pushplus
+pushplus_text.insert("1.0", "请输入pushplus的token")
+pushplus_text.grid(row=2, column=1)
+ 
+url_head = "https://api.seniverse.com/v3/weather/daily.json?" # URL头部
+key = "天气密钥" # 天气密钥
+ 
+# ---------------------------------#
+def get_weather(locat_name):
+    global emailname , token1 # 声明是全局变量
+'''
+当函数get_weather被调用时，它会执行以下操作：  
+1. 声明locat_name和emailname为全局变量。 
+2. 检查locat_name是否为换行符或默认值字符串，如果是，则将locat_name赋值为字符串"ip"。 
+3. 移除locat_name中自带的换行符。 
+4. 检查emailname是否为换行符或默认值字符串，如果是，则将emailname赋值为换行符。 
+5. 移除emailname中自带的换行符。 
+6. 检查token1是否为换行符或默认值字符串，如果是，则将token1赋值为换行符。 
+7. 移除token1中自带的换行符。 
+8. 根据给定的参数和固定的URL头部构造一个完整的URL字符串。 
+9. 使用requests模块的get方法发送一个GET请求到上述构造的URL，并将返回的结果赋值给变量resq。
+'''
+    # 默认为的值
+    if locat_name == "\n" or locat_name == "请输入市级地址\n（默认为当前IP地址）\n":
+        locat_name = "ip"
+    locat_name = locat_name.replace("\n", "")  # 去掉自带的换行
+    if emailname == "\n" or emailname == "请输入接收邮箱\n（多个邮箱请用,分割）\n":
+        emailname = "\n"
+    emailname = emailname.replace("\n", "")  # 去掉自带的换行
+    if token1 == "\n" or token1 == "请输入pushplus的token\n":
+        token1 = '\n'
+    token1 = token1.replace("\n", "")  # 去掉自带的换行
+    # 整合url
+    url = url_head + "key=" + key + "&" + "location=" + locat_name + "&" + "language=zh-Hans&unit=c&start=0&days=5"
+    # 获取天气数据
+    resq = requests.get(url)
+ 
+    if resq.status_code == 200:  # 如果请求返回的状态码为200
+        val_data = resq.text  # 将请求返回的文本赋值给val_data变量
+        weather_data = json.loads(val_data)  # 将val_data解析为json格式并赋值给weather_data变量
+ 
+        locat = weather_data['results'][0]['location']['name']  # 获取天气数据中的地点名称
+        timezone = weather_data['results'][0]['location']['timezone']  # 获取天气数据中的时区
+        timezone_offset = weather_data['results'][0]['location']['timezone_offset']  # 获取天气数据中的时区偏移
+ 
+        print("==========================")
+        print("")
+ 
+        print("地区：", locat)  # 打印地区名称
+        print("时区：", timezone)  # 打印时区
+        print("时区偏移：", timezone_offset)  # 打印时区偏移
+        print("")
+ 
+ 
+ 
+               weath_cn = 0  # 天气序号
+        daily = weather_data['results'][0]['daily']
+    '''
+    这段Python代码用于从天气API获取天气信息并保存到文本文件中。
+    代码首先定义了一个变量weath_cn表示天气序号，然后获取到天气数据的daily信息。
+    接下来使用while循环来遍历daily列表中的每一个天气信息，并进行处理。  
+    在每一次循环中，首先获取当前天气信息的daily_d，
+    然后通过open()函数以写入模式打开一个文本文件，
+    并将日期作为文件名的一部分。然后使用print()函数打印一些天气信息，
+    包括日期、天气情况、最高温度、最低温度、湿度、风向、风速、风向角度、风力等级和降水量。
+    接着将这些天气信息写入到文件中，
+    使用write()函数将日期、天气情况、最高温度、最低温度、湿度、风向、风速、风向角度、风力等级和降水量写入文件。  
+    循环结束后，使用print()函数打印最后更新时间和一个分隔线。
+    '''
+        while weath_cn < len(daily):
+            daily_d = daily[weath_cn]
+            with open(locat + daily_d['date']+'天气.txt', 'w') as file:
+                print("")  # 打印空行
+                print("--------")  # 打印分隔线
+                print("时间：", daily_d['date'])  # 打印日期
+                print("天气：", daily_d['text_day'])  # 打印天气情况
+                print("今日最高温度(℃):", daily_d['high'])  # 打印最高温度
+                print("今日最低温度(℃):", daily_d['low'])  # 打印最低温度
+                print("湿度(%):", daily_d['humidity'])  # 打印湿度
+                print("风向:", daily_d['wind_direction'])  # 打印风向
+ 
+                print("风速(km/h):", daily_d['wind_speed'])  # 打印风速
+                print("风向角度(0~360):", daily_d['wind_direction_degree'])  # 打印风向角度
+                print("风力等级:", daily_d['wind_scale'])  # 打印风力等级
+                print("降水量(mm):", daily_d['rainfall'])  # 打印降水量
+                # 打开文件以写入模式
+                file.write("时间：" + daily_d['date'] + "\n")  # 将日期写入文件
+                file.write("天气：" + daily_d['text_day'] + "\n")  # 将天气情况写入文件
+                file.write("今日最高温度(℃):" + str(daily_d['high']) + "\n")  # 将最高温度写入文件
+                file.write("今日最低温度(℃):" + str(daily_d['low']) + "\n")  # 将最低温度写入文件
+                file.write("湿度(%)：" + str(daily_d['humidity']) + "\n")  # 将湿度写入文件
+                file.write("风向:" + daily_d['wind_direction'] + "\n")  # 将风向写入文件
+                file.write("风速(km/h):" + str(daily_d['wind_speed']) + "\n")  # 将风速写入文件
+                file.write("风向角度(0~360):" + str(daily_d['wind_direction_degree']) + "\n")  # 将风向角度写入文件
+                file.write("风力等级:" + daily_d['wind_scale'] + "\n")  # 将风力等级写入文件
+                file.write("降水量(mm):" + str(daily_d['rainfall']) + "\n")  # 将降水量写入文件
+                weath_cn += 1  # 天气序号加1
+ 
+        print("")  # 打印空行
+ 
+        print("最后更新于:", weather_data['results'][0]['last_update'])  # 打印最后更新时间
+        print("")  # 打印空行
+        print("=============================")  # 打印分隔线
+ 
+        # API接口请求
+        params = {
+            "key": "天气密钥", # API接口密钥
+            "location": locat_name,# 位置名称
+            "language": "zh-Hans", # 单位
+            "unit": "c",# 单位
+        }
+ 
+        # 基本天气
+        url = "https://api.seniverse.com/v3/weather/now.json"
+        # 获取数据
+        r = requests.get(url, params=params)
+        # 解析数据
+        data = r.json()["results"]
+        address = data[0]["location"]['path']  # 地点
+        temperature = data[0]['now']["temperature"]  # 现在温度
+        text = data[0]['now']["text"]  # 现在天气情况
+        last_update = data[0]["last_update"]
+ 
+        # 生活指数
+        url = "https://api.seniverse.com/v3/life/suggestion.json"
+        # 获取数据
+        r1 = requests.get(url, params=params)
+        # 解析数据
+        data = r1.json()["results"]
+        car = data[0]["suggestion"]['car_washing']["brief"]  # 洗车
+        dressing = data[0]["suggestion"]['dressing']["brief"]  # 穿衣
+        flu = data[0]["suggestion"]['flu']["brief"]  # 感冒
+        sport = data[0]["suggestion"]['sport']["brief"]  # 运动
+        travel = data[0]["suggestion"]['travel']["brief"]  # 旅行建议
+        uv = data[0]["suggestion"]['uv']["brief"]  # 紫外线情况
+ 
+        # 日期
+        # 获取当前日期，格式为年-月-日
+        date = datetime.date.today().strftime("%Y-%m-%d")
+        # 星期几
+        # 获取当前日期是星期几（星期一为1），并加1
+        weekday = datetime.date.today().weekday() + 1
+        # 用cn2an包将阿拉伯数字转为中文数字
+        # 将星期几的数字转换为中文数字
+        weekday = cn2an.an2cn(weekday)
+ 
+ 
+        # 显示消息
+        message = f"日期：{date} 周{weekday}   " + address + "    天气：\n" + \
+                  "现在温度：" + temperature + "℃" + \
+                  "\n现在天气情况：" + text + \
+                  "\n" \
+                  "\n洗车建议：" + car + \
+                  "\n穿衣建议：" + dressing + \
+                  "\n感冒情况：" + flu + \
+                  "\n运动建议：" + sport + \
+                  "\n旅行建议：" + travel + \
+                  "\n紫外线情况：" + uv + \
+                  "\n数据更新时间：" + last_update
+        print(message)
+ 
+ 
+        # 发送邮件
+        def send_email(subject, email_content, toaddr=emailname):
+            # 发送邮件的函数，接收主题、邮件内容和收件人地址作为参数，默认收件人地址为 emailname
+            # 发件人邮箱账号
+            fromaddr = '123@qq.com'
+            # 发件人邮箱密码
+            passwd = '发件人邮箱密码'
+            # 创建与QQ邮箱SMTP服务器的加密连接
+            server = smtplib.SMTP_SSL('smtp.qq.com', port=465)
+            # 使用给定的账号和密码登录邮箱服务器
+            server.login(fromaddr, passwd)
+            # 创建邮件内容
+            message = MIMEText(email_content, 'plain', 'utf-8')
+            # 设置邮件的发件人和收件人
+            message['From'] = '123 <123@qq.com>'
+            message['To'] = toaddr
+            # 设置邮件的主题
+            message['Subject'] = Header(subject, 'utf-8')
+            # 获取收件人地址列表
+            receiver = message['To'].split(';')
+            # 使用发件人和收件人列表，以及邮件内容发送邮件
+            server.sendmail(fromaddr, receiver, message.as_string())
+            # 关闭与邮箱服务器的连接
+            server.quit()
+ 
+ 
+        # 调用send_email函数发送邮件
+        # 邮件主题为locat+f"{date} 周{weekday}" +"   的天气情况"
+        # 邮件内容为message
+        send_email(locat+f"{date} 周{weekday}"  +"   的天气情况", message)
+ 
+        # 打印\n\n邮件发送成功\n\n
+        print("\n\n邮件发送成功")
+ 
+ 
+        # 微信公众号推送天气
+        def send_wechat(message):
+            # 设置token变量为token1
+            token = token1
+            # 设置title变量为locat+'   的天气'
+            title = locat + '   的天气'
+            # 设置content变量为message
+            content = message
+            # 设置template变量为'html'
+            template = 'html'
+            # 拼接url字符串
+            url = f"https://www.pushplus.plus/send?token={token}&title={title}&content={content}&template={template}"
+            # 发送get请求，将返回结果赋值给r变量
+            r = requests.get(url=url)
+            # 打印微信公众号推送成功的信息
+            print("微信公众号推送成功")
+ 
+ 
+ 
+    else:
+        print(resq.status_code)
+def start_request():
+    """
+    开始请求函数，获取文本信息并打印，同时获取全局变量emailname和token1的值，
+    并调用get_weather函数获取天气信息。
+    """
+    text = location_text.get("1.0", "end")  # 获取文本信息
+    print(text)  # 打印文本信息
+    global emailname, token1  # 声明为全局变量
+    emailname = email1.get("1.0", "end")  # 获取全局变量emailname的值
+    token1 = pushplus_text.get("1.0", "end")  # 获取全局变量token1的值
+ 
+    get_weather(text)  # 调用get_weather函数获取天气信息
+ 
+def info_request():
+    """
+    提示用户未来3天天气状况会保存为TXT文件，并显示作者信息
+    """
+    messagebox.showinfo(title="提示",
+                        message="未来3天天气状况会保存为TXT文件~\r不输入为默认值\r\n仅限市级城市呀😊  \r作者：忍黄豆  ")
+ 
+ 
+def init_gui():
+    # 设置窗口大小和位置
+    root.geometry("380x150+750+400")
+    # 设置窗口标题
+    root.title("—天气获取工具😀—  ")
+ 
+    # 创建一个开始按钮
+    start_button = Button(root, text="获 取", anchor='w', font=("楷体", 15), command=start_request)
+    # 将开始按钮放置在窗口的第0行第0列
+    start_button.grid(row=0, column=0)
+ 
+    # 创建一个关于按钮
+    info_button = Button(root, text="关 于", anchor='w', font=("楷体", 15), command=info_request)
+    # 将关于按钮放置在窗口的第1行第0列
+    info_button.grid(row=1, column=0)
+ 
+ 
+def main():     #主函数，启动应用程序
+    # 初始化GUI界面
+    init_gui()
+    # 运行GUI程序
+    root.mainloop()
+ 
+ 
+main()
+```
