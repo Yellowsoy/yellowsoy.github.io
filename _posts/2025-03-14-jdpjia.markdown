@@ -1,7 +1,7 @@
 ---
 layout:     post
 title:      "分享一个京东自动评价的脚本"
-subtitle:   " \"主要为浏览器JSON代码\""
+subtitle:   " \"主要为浏览器JavaScript代码\""
 date:       2025-03-14 12:00:00
 author:     "Jerry不是猫"
 header-img: "img/post-bg-2015.jpg"
@@ -26,7 +26,7 @@ tags:
 
 4、代码，需要修改评价内容的，可以直接代码的中文部分修改。
 
-```json
+```JavaScript
 document.body.innerHTML ="";$("html").css("overflow","hidden");$("body").append('<div id="topTitle" style="padding:20px;display:block;font-size:48px;color:#FFFFFF;background-color:#e2231a;width:100%;text-align:center">京东自动评价JS脚本 </div><iframe src="https://club.jd.com/myJdcomments/myJdcomment.action?sort=0" style="width:99%;height:800px" id="JDifr"></iframe>');$("#J-global-toolbar").remove();
 let isFiveStar = true;
 $("#topTitle").click(function(){(isFiveStar = !isFiveStar) ? $("#topTitle").css("background-color","#e2231a"):$("#topTitle").css("background-color","#8B0000");});
