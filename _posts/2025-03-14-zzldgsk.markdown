@@ -1,14 +1,13 @@
 ---
 layout:     post
 title:      "争执里的共生课"
-subtitle:   " \人际关系修复的智慧与挑战\""
+subtitle:   " \"人际关系修复的智慧与挑战"\""
 date:       2025-03-14 12:00:00
 author:     "忍黄豆"
 header-img: "img/post-bg-2015.jpg"
-catalog: true
+catalog: false
 tags:
-    - 转载
-    - 分享
+    - 杂谈
 ---
   在抖音上看到一个情感博主发了一个这样子的文案：
 
