@@ -15,4 +15,4 @@ tags:
 
 忍黄豆 的 Blog 就这么开通了。
 
-
+博客的框架来源于**[@Huxpro黄玄](https://github.com/Huxpro/huxblog-boilerplate)**,感谢他开放的源代码。
