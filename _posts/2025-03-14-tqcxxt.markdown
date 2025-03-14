@@ -15,7 +15,7 @@ tags:
 天气数据接口使用了“心知天气”
 会查询最近的天气数据并且发送到邮箱和推送的微信，微信推送用的是pushplus
 
-![]((https://attach.52pojie.cn/forum/202401/21/100907sd515m15ebrrxzsb.png))
+![]((https://attach.52pojie.cn/forum/202401/21/100907sd515m15ebrrxzsb.png)
 
 ![](https://attach.52pojie.cn/forum/202401/21/100909jrieqlnaiiqtqnjp.png)
 
