@@ -1,0 +1,45 @@
+---
+layout:     post
+title:      "【转载】格式转换工具-V4.2.0 "
+subtitle:   " \"海康威视出品\""
+date:       2025-03-15 20:00:00
+author:     "海康威视"
+header-img: "img/post-bg-2015.jpg"
+catalog: false
+tags:
+    - 资源
+    - 转载
+    - 分享
+---
+> 【转载】海康威视出品  [原文链接](https://www.hikvision.com/cn/support/Downloads/Desktop-Application/format-converison-tool/)
+>
+> 格式转换工具-V4.2.0绿色便携版，免安装。
+>
+> 可以转换监控文件*.ps
+>
+>
+> 版本V4.2.0
+
+
+ ****功能概述：**** 支持多种文件格式转换，源文件格式如*.mp4，*.flv，*.avi，*.3gp，*.mp3，*.jpg，*.jpeg；输出文件格式如*.mp4，*.aac，*.jpg。 
+
+****主要功能：**** 基本功能特性列举如下：* 支持两种语言界面；
+
+* 支持CPU状态显示；
+* 支持转换参数设置；
+* 支持转换视频参数复制；
+* 支持设置输出文件路径；
+* 支持批量视频添加；
+* 支持视频预览。
+
+ ****运行环境：**** 操作系统：Microsoft Windows XP/Windows 7/Windows 8（支持32/64位系统）内存：512MB或以上
+
+![](https://attach.52pojie.cn/forum/202405/05/113131qc9too399k4z99to.png)
+
+![](https://attach.52pojie.cn/forum/202405/05/113127yr7fzeidpuocoppi.png)
+
+
+下载地址：
+
+* [蓝奏云:](https://wwf.lanzoum.com/iihGo1xqhnij)https://wwf.lanzoum.com/iihGo1xqhnij
+* [萌盘:](https://pan.moe/s/B5Rt1)https://pan.moe/s/B5Rt1
