@@ -164,4 +164,4 @@ tags:
 
 ![pEa2mxf.jpg](https://s21.ax1x.com/2025/03/15/pEa2mxf.jpg)
 
-<div style="pos&tion:relative； padding：30% 45%；"><iframe style="position:absolute； width：100%； height：100%； left：0； top：0；"src="[https://mv.loll.cc/filebrowser/DF/Water%20Rocket%20-%20Data%20Visualizer%20Demo.mp4](https://www.bilibili.com/video/BV1kxQDYUEqZ/?share_source=copy_web&vd_source=7e31e54eb16bfd7f5affcd9f2433b7ec)" scrolling="no" border="0"frameborder="no" framespacing="0" allowfullscreen="true"></iframe></div>
+<div style="pos&tion:relative； padding：30% 45%；"><iframe style="position:absolute； width：100%； height：100%； left：0； top：0；"src="//player.bilibili.com/player.html?isOutside=true&aid=114167092615671&bvid=BV1kxQDYUEqZ&cid=28883159932&p=1" scrolling="no" border="0"frameborder="no" framespacing="0" allowfullscreen="true"></iframe></div>
