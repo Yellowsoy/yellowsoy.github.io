@@ -165,3 +165,5 @@ tags:
 ![pEa2mxf.jpg](https://s21.ax1x.com/2025/03/15/pEa2mxf.jpg)
 
 <center> <iframe src="https://player.bilibili.com/player.html?isOutside=true&aid=114167092615671&bvid=BV1kxQDYUEqZ&cid=28883159932&p=1" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true"></iframe> </center>
+
+<div style="position:relative;padding:30% 45%;"><iframe style="position:absolute;width：100%; height:100%; left:0; top:0;"src="//player.bilibili.com/player.html?isOutside=true&aid=114167092615671&bvid=BV1kxQDYUEqZ&cid=28883159932&p=1scrolling="no" border="0" frameborder="no" framespacing="0"allowfullscreen="true"></iframe></div>
