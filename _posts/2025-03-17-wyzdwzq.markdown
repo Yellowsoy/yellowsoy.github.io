@@ -1,7 +1,7 @@
 ---
 layout:     post
-title:      "汪曾祺：中国最后一位士大夫文人 "
-subtitle:   " \"我眼中的汪曾祺"\""
+title:      "汪曾祺：中国最后一位士大夫文人"
+subtitle:   " \"我眼中的汪曾祺\""
 date:       2025-03-17 20:00:00
 author:     "忍黄豆"
 header-img: "img/kzfj.jpg"
