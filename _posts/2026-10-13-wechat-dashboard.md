@@ -1880,7 +1880,7 @@ crontab -e
 
 ## 九、看板功能说明（含合集的限制）
 
-![看板整页效果](/img/wechat-dashboard-overview.jpg)
+![看板整页效果](/img/in-post/post-wechat-dashboard/wechat-dashboard-overview.jpg)
 
 <center>图 1：看板整页效果（KPI、趋势、粉丝、来源、榜单、明细；截图为演示数据）</center>
 
@@ -1897,7 +1897,7 @@ crontab -e
   - `下载全部Excel`：导出全部文章；
   - 列含：发表日期、标题、合集、阅读 / 分享 / 收藏 / 点赞 / 在看 / 留言人数、链接。
 
-![文章明细工具栏](/img/wechat-dashboard-detail.jpg)
+![文章明细工具栏](/img/in-post/post-wechat-dashboard/wechat-dashboard-detail.jpg)
 
 <center>图 2：文章明细工具栏——日期筛选、合集下拉、标题搜索、管理合集与 Excel 导出（近 30 天 / 全部）</center>
 
