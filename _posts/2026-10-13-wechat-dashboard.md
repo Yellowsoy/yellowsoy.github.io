@@ -180,7 +180,7 @@ GitHub Actions 的出口 IP 同样是一大段动态地址段，无法固定加�
 >
 > 文件名必须**一字不差**（注意区分大小写、不要多 `.txt` 后缀）。用系统自带的文本编辑器（Linux 的文本编辑器、Windows 的记事本、VS Code 等）新建文件，粘贴对应代码后保存。
 >
-> 本文配图位于 `img/` 目录（`wechat-dashboard-overview.jpg`、`wechat-dashboard-detail.jpg`）；部署到 Jekyll 时，请把这两张图片放进站点根目录的 `img/` 文件夹，与文中路径保持一致。
+
 
 ### 文件 1：`config.json`（唯一需要你改动的文件）
 
