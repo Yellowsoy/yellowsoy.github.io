@@ -1,7 +1,7 @@
 ---
 layout:     post
-title:      "公众号数据看板 v2：从单机本地，到多端同步"
-subtitle:   " \"依旧零成本、不装数据库，但这次补上了服务端鉴权、云端同步和周统计口径\""
+title:      "公众号数据看板 v2：从零开始，小白也能搭起来"
+subtitle:   " \"从拿 AppSecret、配 IP 白名单，到本地采集、同步线上、每天自动更新，一步一验收\""
 date:       2026-10-13 12:00:00
 author:     "Yellowsoy"
 header-img: "img/post-bg-2015.jpg"
@@ -14,91 +14,99 @@ tags:
     - 微信公众号
 ---
 
-> **更新说明**：本文最初发布于 2026-10-13，讲的是「本地 Python + JSON + 单文件 HTML」的零成本方案。
-> 实际用了两周之后，这套东西暴露出不少问题——**密码写在前端、回收站不同步、发布日期错标、趋势图拉长了看不清**。
-> 于是有了 v2。本文已按 v2 **整体重写**，完整源码开源在 GitHub（见第六节）。
+> **更新说明**：本文最初发布于 2026-10-13，讲「本地 Python + JSON + 单文件 HTML」的零成本方案。
+> 用了两周后暴露出一堆问题（密码裸奔、回收站不同步、发布日期错标……），于是有了 v2。
+> 本文已按 v2 **整体重写，并改写成从零开始的完整教程**：不管你有没有写过代码，照着做就能跑通。
+> 完整源码开源在 GitHub（见第五节）。
 
-最近在运营公众号，想要一个能**自动更新**的数据看板：顶部一排 KPI、阅读分享趋势、粉丝增长、来源构成、文章榜单和明细表。而我的要求一直很朴素：**不花钱、不买服务器、不装数据库、不依赖云服务**。
+想要一个能**自动更新**的公众号数据看板：顶部一排 KPI、阅读分享趋势、粉丝增长、来源构成、文章榜单和明细表。而要求很朴素：**不花钱、不买服务器、不装数据库、不依赖云服务**。
 
-v1 做到了这些，但用起来有七处明显的别扭。这篇文章记录 v2 的来龙去脉、**关键改造的代码**、零基础部署教程、踩坑与维护建议。
-
-> 面向 **Windows / macOS / Linux（含统信 UOS 等国产系统）**，代码以 Linux 路径为主，Windows/Mac 的差异在对应位置单独说明。
+这篇文章从"微信后台该点哪里"开始讲起，一直到"每天自动更新、手机上也能看"，每一步都给出**验收标准**——做完一步自己验证一步，不用猜。
 
 * * *
 
 ## 目录
 
-01. 从 v1 到 v2：到底改了什么
-02. 先搞懂几个名词（小白必看）
-03. 三条"能白嫖"的路，为什么依然走不通
-04. v2 架构：本地采集 + 双版本部署
-05. 你需要准备什么，以及如何获取 AppID / AppSecret
-06. 五个关键改造（含新版代码）
-07. 完整源码获取与目录结构
-08. 手把手：两种部署方式
+01. 先定目标：做到什么程度算成功（OKR 验收清单）
+02. v2 相比 v1 改了什么
+03. 先搞懂几个名词（小白必看）
+04. 方案原理：为什么必须"本地采集"
+05. 开工前：把源码和 Python 准备好
+06. 微信侧配置：权限、AppSecret、access_token、IP 白名单
+07. 本地部署：一步一步（Windows / macOS / Linux）
+08. 把数据送到线上端
 09. 设置每天自动同步
-10. 看板功能说明
-11. 常见问题与错误码速查
-12. 后续维护与备份
+10. 排障大全（几乎所有你可能遇到的问题）
+11. 备份、迁移与恢复
+12. 进阶：v2 的五个关键改造（含代码）
 
 * * *
 
-## 一、从 v1 到 v2：到底改了什么
+## 一、先定目标：做到什么程度算成功（OKR 验收清单）
 
-先把 v1 的问题摆出来，这决定了 v2 改什么：
+先说清楚终点在哪，免得做到一半不知道对不对。
 
-| 问题 | v1 的做法 | v2 的做法 |
+**O（目标）**：在自己的电脑上跑起一个**会自动更新**的公众号数据看板，并且手机、其他电脑打开链接也能看到同一份数据。
+
+| | 关键结果 | 验收标准（做到了打勾） |
 | --- | --- | --- |
-| **密码裸奔**：密码写在前端 JS 里，F12 一眼看到 | `var PWD = '...'` | 挪到服务端 `POST /api/auth`，校验后下发 8 小时令牌 |
-| **回收站不同步**：在这台电脑删的，另一台还在 | 只存本机 `localStorage` | 云端 `/api/state` 全设备同步 |
-| **只能单机看**：换台电脑、手机上就打不开 | 手动拷文件夹 | 增加「线上部署版」，本地采集完自动推送 |
-| **周统计只有一种口径** | 固定"近 7 天" | 双口径：近 7 天滚动 / 本周（周一至周日） |
-| **发布日期错标**：老文章被标成最近的日期 | `setdefault` 写死首次日期 | 按「文章日报」取最早日期重算 |
-| **趋势图拉长看不清** | 无缩放 | 底部比例尺拖拽 + 滚轮/双指缩放 |
-| **布局固定** | 无 | 模块可拖拽调位置和大小，临时/默认两级 |
+| **KR1** | 微信侧打通 | 拿到 AppID / AppSecret；手动请求能返回一个 `access_token`（而不是 40164） |
+| **KR2** | 本地采集跑通 | `sync.py` 执行完不报错；目录下出现 `store.json` 和 `data.js`，文章数 > 0 |
+| **KR3** | 看板能看到 | 打开页面：KPI 有数字、趋势图有曲线、文章明细表有行 |
+| **KR4** | 线上也能看 | 线上地址打开看到同样的数据；删一篇文章，手机上也消失 |
+| **KR5** | 自动跑起来 | 定时任务配好，连续 3 天不用管；漏跑一天能自己补上 |
 
-一句话总结：**v2 没有放弃"零成本"，只是把"谁来验证身份、数据存在哪"这两件事重新安排了一下。**
+**开工前的自检表**（有一项不满足就先解决它）：
 
-## 二、先搞懂几个名词（小白必看）
+- [ ] 公众号是**已认证**的订阅号或服务号（个人订阅号不行）
+- [ ] 你是管理员，或者已被绑为**长期运营者**
+- [ ] 电脑能上网，装了 Python 3.7 以上
+- [ ] 有 20 分钟不被打断的时间
+
+> 第一项卡死最多人：**数据统计接口只对已认证账号开放**。没认证的话，后面全部白做，先去认证。
+
+## 二、v2 相比 v1 改了什么
+
+| 问题 | v1 | v2 |
+| --- | --- | --- |
+| 密码写在前端 JS，F12 可见 | `var PWD = '...'` | 挪到服务端，校验后下发 8 小时令牌 |
+| 回收站不同步（这台删了那台还在） | 存本机浏览器 | 云端状态，全设备同步 |
+| 只能单机看 | 手动拷文件夹 | 增加线上部署版，本地采完自动推送 |
+| 周统计只有一种口径 | 固定"近 7 天" | 近 7 天滚动 / 本周（周一至周日）可切换 |
+| 老文章发布日期错标 | `setdefault` 写死首次日期 | 按文章日报取最早日期重算 |
+| 趋势图拉长看不清 | 无缩放 | 底部比例尺拖拽 + 滚轮/双指缩放 |
+| 布局固定 | 无 | 模块可拖拽调位置和大小 |
+
+一句话：**v2 没放弃"零成本"，只是把"谁来验证身份、数据存在哪"重新安排了一下。**
+
+## 三、先搞懂几个名词（小白必看）
 
 名词 | 通俗解释
 --- | ---
-**AppID（开发者ID）** | 公众号的"身份证号"，以 `wx` 开头，公开可查，不保密
-**AppSecret（开发者密码）** | 公众号的"密码"，**绝不能泄露**，用来换 access_token
-**access_token（访问令牌）** | 拿 AppID + AppSecret 换来的"临时通行证"，**有效期 7200 秒（2 小时）**，所有数据请求都要带它
-**IP 白名单** | 微信只允许白名单里的 IP 取数据，必须把自己电脑的**公网 IP** 填进后台
-**公网 IP** | 你家宽带在互联网上的"门牌号"，可在 https://ip.cn 查到，脚本首次运行也会提示
-**datacube** | 微信官方的一组数据统计接口，取阅读、分享、粉丝等数据
-**UV / PV** | UV = 阅读**人数**（同一人看多次算 1）；PV = 阅读**次数**。**微信自 2025-11-01 起只保留 UV，取消了 PV**
+**AppID（开发者ID）** | 公众号的"身份证号"，`wx` 开头，公开可查，不保密
+**AppSecret（开发者密码）** | 公众号的"密码"，**绝不能泄露**，用它换 access_token
+**access_token（访问令牌）** | 拿 AppID + AppSecret 换来的"临时通行证"，**有效期 7200 秒（2 小时）**，调数据接口必须带它
+**IP 白名单** | 微信只允许白名单里的 IP 去**换取 token**，不在名单里直接拒绝
+**公网 IP** | 你家宽带在互联网上的"门牌号"，和内网 `192.168.x.x` 不是一回事
+**datacube** | 微信官方数据统计接口组，取阅读、分享、粉丝等
+**UV / PV** | UV = 阅读**人数**（同一个人看多次算 1）；PV = 阅读**次数**。**微信自 2025-11-01 起只保留 UV，取消了 PV**
 
-还有一个**最重要的前提**：
+## 四、方案原理：为什么必须"本地采集"
 
-> 数据统计接口**只对"已认证的订阅号 / 服务号"开放**。未认证的订阅号、个人号调不了这些接口，请先确认你的公众号已通过微信认证。
-
-## 三、三条"能白嫖"的路，为什么依然走不通
-
-v2 依然坚持本地采集，因为这三条路一条都没变通畅：
+先把三条看似能偷懒的路堵死，你才会死心塌地按本文做：
 
 **1. 纯静态 HTML 直接调微信接口？不行**
-- **CORS**：浏览器跨域被拦，微信接口不允许网页直接请求；
-- **AppSecret 泄露**：前端写死密码等于公之于众；
-- **IP 白名单**：页面跑在每个访客自己的网络里，IP 不固定，没法加白名单。
+浏览器跨域被拦（CORS）；AppSecret 写在前端等于公开；而且页面跑在每个访客自己的网络里，IP 不固定，没法加白名单。
 
-**2. 用 Cloudflare Workers 免费版？不行**
-免费版出口 IP 是动态共享地址，每天在变，无法加白名单；想要固定出口 IP 就得付费。
+**2. Cloudflare Workers 免费版？不行**
+免费版出口 IP 是动态共享地址，每天在变，无法加白名单。
 
-**3. 用 GitHub Actions 代跑？也不行**
-出口 IP 同样是一大段动态地址段，无法固定。
+**3. GitHub Actions 代跑？也不行**
+同样是一大段动态 IP 段。
 
-### 那 v2 的"线上版"是怎么回事？
+### 那"线上版"是怎么回事？
 
-这是 v2 最关键的设计：**线上版不采集，它只负责"展示 + 状态同步"。**
-
-采集仍然只能在你本机跑（因为 IP 白名单和 AppSecret 都在你手上）。本地采完生成 `data.js`，再推到线上覆盖——线上只是一个"能给别人看的、能多端同步回收站和布局的展示层"。
-
-这样既守住了"零成本 + 凭据不外出"，又解决了"换台设备就看不了"的问题。
-
-## 四、v2 架构：本地采集 + 双版本部署
+这是 v2 最关键的设计：**线上版不采集，只负责"展示 + 状态同步"。**
 
 ```
    ┌────────────┐   每天定时    ┌──────────────────────┐
@@ -117,79 +125,501 @@ v2 依然坚持本地采集，因为这三条路一条都没变通畅：
                           │ 读取                        自动推送 │
                  ┌────────▼────────┐            ┌──────────▼─────────┐
                  │ 本地 index.html  │            │ 线上 index.html     │
-                 │ （双击打开）      │            │ （手机/其他电脑也能看）│
+                 │ （自己电脑看）    │            │ （手机/别的电脑也能看）│
                  └─────────────────┘            └──────────┬─────────┘
                                                            │ /api/state
                                                  ┌─────────▼─────────┐
-                                                 │ state.json（云端）  │
-                                                 │ 回收站/重命名/布局   │
+                                                 │ 回收站 / 重命名 / 布局 │
                                                  └───────────────────┘
 ```
 
+采集只能在你本机跑（因为 AppSecret 和白名单都在你手上），采完生成 `data.js` 推到线上。线上只是个"能给别人看的展示层"。
+
 三个数据文件各司其职：
 
-| 文件 | 作用 | 谁能改 |
+| 文件 | 作用 |
+| --- | --- |
+| `store.json` | 本地累积库：文章字典、日报、删除台账。**这是你最该备份的文件** |
+| `data.js` | 看板渲染数据（KPI、趋势、文章明细） |
+| `state.json`（线上） | 云端共享状态：回收站、重命名、布局 |
+
+## 五、开工前：把源码和 Python 准备好
+
+### 1. 拿到源码（两种方式，选一个）
+
+**方式 A：下载 ZIP（推荐给完全不熟命令行的）**
+
+1. 打开 https://github.com/Yellowsoy/gzh-data-dashboard
+2. 点绿色按钮 **Code → Download ZIP**
+3. 解压，得到一个 `gzh-data-dashboard-main` 文件夹
+
+**方式 B：git clone（熟悉命令行的）**
+
+```bash
+git clone https://github.com/Yellowsoy/gzh-data-dashboard.git
+```
+
+目录长这样，你只需要关心 `local-deployment`（本地版）和 `workbuddy-deployment`（线上版）：
+
+```
+gzh-data-dashboard/
+├── README.md
+├── LICENSE                       # MIT 协议
+├── local-deployment/             # ← 先用这个
+│   ├── index.html                # 看板页面
+│   ├── serve.py                  # 本地服务
+│   ├── sync.py                   # 采集脚本（核心）
+│   ├── config.example.json       # 配置模板
+│   ├── run.sh / stop.sh          # 一键启动 / 停止
+│   └── vendor/                   # echarts / xlsx 离线库
+└── workbuddy-deployment/         # ← 第八节才用到
+    ├── index.html
+    ├── server.py
+    └── vendor/
+```
+
+### 2. 确认 Python 装好了
+
+打开终端（Windows 用「命令提示符」或 PowerShell；Mac/Linux 用「终端」），执行：
+
+```bash
+python3 --version      # Mac / Linux
+python --version       # Windows
+```
+
+看到 `Python 3.7.x` 以上就行。没装的话：
+
+- **Windows**：去 https://www.python.org/downloads/ 下载，**安装时务必勾选 "Add Python to PATH"**（漏了会很麻烦）
+- **macOS**：`brew install python3`，或官网下载
+- **Linux / 统信 UOS**：一般自带；没有就 `sudo apt install python3`
+
+> **验收点**：`python3 --version` 能打印版本号，不是"不是内部或外部命令"。
+
+### 3. 建一个固定目录，把文件放进去
+
+新建一个文件夹，路径**不要带中文和空格**，之后也别再挪动：
+
+- Windows：`D:\wechat-dashboard`
+- Mac / Linux：`~/wechat-dashboard`
+
+把 `local-deployment` 里的**全部内容**（含 `vendor` 文件夹）拷进去。
+
+> **验收点**：目录里能看到 `sync.py`、`serve.py`、`index.html`、`config.example.json`、`vendor/`。
+
+## 六、微信侧配置：权限、AppSecret、access_token、IP 白名单
+
+这一节是全文最容易卡住的地方，慢慢来。
+
+### 6.1 关于"成为开发者"：你需要什么权限
+
+微信现在没有单独的"开发者"按钮了，实际起作用的是**身份**：
+
+| 身份 | 能做什么 |
+| --- | --- |
+| **管理员** | 公众号注册时的微信号，权限最高：能重置 AppSecret、改 IP 白名单、绑运营者 |
+| **长期运营者** | 管理员在后台绑定后，基本等同管理员（可重置 AppSecret、改白名单） |
+| **短期运营者** | 有期限，权限同上但会过期 |
+
+**如果你不是管理员**，让管理员这么做：
+
+1. 管理员登录 https://mp.weixin.qq.com
+2. **设置与开发 → 人员设置 → 绑定运营者**
+3. 选「长期运营者」，输入你的微信号，管理员扫码确认，你在手机上点确认
+4. 之后你就能自己重置 AppSecret、改白名单了
+
+**如果一时找不到管理员**，退而求其次：让管理员把 AppSecret 重置后发给你，并帮忙填好 IP 白名单。注意 AppSecret 等同于密码，别在群里明文发。
+
+### 6.2 获取 AppID 与 AppSecret（跟着点）
+
+1. 电脑浏览器打开 https://mp.weixin.qq.com，管理员微信扫码登录
+2. 左侧菜单拉到最下：**设置与开发 → 基本配置**
+3. 页面中部「开发者ID」区域：
+   - **AppID**：直接显示，`wx` 开头，点「复制」存好
+   - **AppSecret**：默认隐藏。点右边「重置」（有的显示「生成」）→ 管理员微信扫码 → **立刻复制保存**
+4. 保存后关掉窗口就看不到了（只能再重置一次，而重置会让旧的立刻失效）
+
+> **验收点**：你手上有两串字符——`wx` 开头的 AppID，和 32 位的 AppSecret。
+
+### 6.3 access_token 是什么，怎么验证它真的能拿到
+
+你不会"手动去拿令牌"，脚本会自动换。但**开工前建议手动测一次**，能提前暴露 AppSecret 填错、白名单没配对等问题，比等脚本报错好排查。
+
+**Mac / Linux**，终端执行（换成你自己的值）：
+
+```bash
+curl "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=你的AppID&secret=你的AppSecret"
+```
+
+**Windows PowerShell**：
+
+```powershell
+(Invoke-WebRequest "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=你的AppID&secret=你的AppSecret").Content
+```
+
+**也可以直接用浏览器**访问上面那个 URL（把中文替换掉）。
+
+三种结果：
+
+| 返回 | 含义 | 怎么办 |
 | --- | --- | --- |
-| `store.json` | 本地累积库：文章字典、日报、重命名记录 | 只有 `sync.py` 写 |
-| `data.js` | 看板渲染数据（KPI、趋势、文章明细） | 本地生成 / 上传覆盖 |
-| `state.json` | 云端共享状态：回收站、标题重命名、布局 | 页面写接口推到线上 |
+| `{"access_token":"57_xxxx...","expires_in":7200}` | ✅ 成功 | 继续下一步 |
+| `{"errcode":40164,"errmsg":"invalid ip 1.2.3.4, not in whitelist"}` | IP 不在白名单 | 去 6.4 加白名单，注意报错里那个 IP 就是你当前的公网 IP |
+| `{"errcode":40013,"errmsg":"invalid appid"}` 或 `40001` | AppID / AppSecret 填错 | 回到 6.2 重新复制，注意别多复制空格 |
 
-## 五、你需要准备什么，以及如何获取 AppID / AppSecret
+关于令牌，记住三点：
 
-### 1. 需要准备的 4 样东西
+1. **有效期 2 小时**，过期要重新换。脚本会把它缓存到 `token.json`，快过期才去换，不用你管
+2. **不要每次调用都去换**。频繁换取会触发日调用上限，正确做法是"中控"——全局只维护一个令牌
+3. **换取令牌这一步才校验 IP 白名单**，后面调数据接口不校验
 
-信息 | 在哪里获取 | 说明
---- | --- | ---
-**AppID** | 微信公众平台 → 设置与开发 → 基本配置 | 以 `wx` 开头
-**AppSecret** | 同上 → 开发者密码（点「重置」可见，需管理员扫码） | 只填到本机，**不要发给任何人**
-**本机公网 IP** | https://ip.cn 查看，或首次运行脚本时的提示 | 要加进白名单
-**公众号状态** | —— | 必须是**已认证**的订阅号 / 服务号
+> **验收点（KR1）**：上面那条请求能返回一个 `access_token` 字符串。这是整个项目最关键的一道门槛，过了它后面基本顺畅。
 
-### 2. 手把手获取 AppID / AppSecret（跟着点）
+### 6.4 IP 白名单：11 条注意事项
 
-1. 电脑浏览器打开微信公众平台：**https://mp.weixin.qq.com**
-2. 用**绑定该公众号的管理员微信**扫码登录
-3. 左侧菜单栏拉到最下方，**「设置与开发」→「基本配置」**
-4. 页面中部「开发者ID」区域：
-   - **AppID**：直接显示，`wx` 开头，点「复制」
-   - **AppSecret**：默认隐藏，点右边「重置」（有的显示「生成」）→ 管理员微信扫码确认 → **立刻复制保存**（只完整显示这一次）
-5. 同页面往下找「IP白名单」，点「修改」：
-   - 填你的公网 IP；支持单个 `1.2.3.4`，也支持 `1.2.3.4/24` 这种网段
-   - **不支持** `1.2.3.*` 写法
-   - 家庭宽带 IP 偶尔会变，变了脚本会提示，照提示更新即可
+在**同一页面**（基本配置）往下找「IP白名单」，点「修改」，把你的公网 IP 填进去。
 
-> 安全提醒：AppSecret 只填在你自己电脑的 `config.json` 里，**不要发到群里、不要写进任何网页、不要提交到 Git**。
+**怎么查自己的公网 IP**：浏览器打开 https://ip.cn 或 https://ip.sb ；命令行 `curl ifconfig.me`；或者直接看 6.3 里 40164 报错里那个 IP——最准。
 
-### 3. 确认电脑装了 Python
+填的时候注意这些（每一条都是真踩过的坑）：
 
-- **Linux / 统信 UOS**：一般自带，`python3 --version` 看到 3.7+ 即可
-- **Windows**：https://www.python.org/downloads/ 下载，**安装时勾选 "Add Python to PATH"**
-- **macOS**：终端执行 `python3 --version`，没有就按提示装
+1. **填公网出口 IP，不是内网 IP**。`192.168.x.x`、`10.x.x.x`、`172.16-31.x.x`、`127.0.0.1` 统统无效
+2. **家庭宽带 IP 会变**。重启光猫、运营商回收、隔几天都可能换。变了就报 40164，按提示更新即可
+3. **单位网络可能多出口**。有负载均衡的话，每次请求的出口 IP 可能不一样——症状是"明明加了白名单，还是偶尔报错"。解决办法：把报错里出现过的 IP 逐个加进去，或者加一段 CIDR（如 `1.2.3.0/24`）
+4. **格式**：一行一个；支持 `1.2.3.4` 和 `1.2.3.4/24`；**不支持** `1.2.3.*` 这种通配符
+5. **生效有延迟**：保存后约 1–2 分钟，极少数情况更久。刚改完立刻重试失败，等两分钟再说
+6. **修改需要管理员或长期运营者扫码**
+7. **改白名单会影响所有用这个 AppSecret 的地方**。如果还有别的系统在用，别删掉原来的条目，只做新增
+8. **换网络要重加**：手机热点、出差住酒店、开 VPN——出去的 IP 都变了。**开着 VPN 时出去的是 VPN 的 IP**
+9. **线上版服务器不需要加白名单**。因为线上不调微信接口，只做展示（很多人白白加了一堆服务器 IP）
+10. **白名单只卡"换 token"这一步**。数据接口本身不校验 IP，所以只要 token 拿到了，后面不会被 IP 拦
+11. **填错不会提前警告**。只有真正请求时才会报 40164，所以务必用 6.3 的方式实测一次
 
-## 六、五个关键改造（含新版代码）
+> **验收点**：白名单保存 2 分钟后，重跑 6.3 的请求，能拿到 `access_token`。
 
-下面这五处是 v2 相对 v1 的实质改动，代码都取自开源仓库。
+## 七、本地部署：一步一步
 
-### 改造 1：密码挪到服务端，前端不留任何密码
+### 7.1 创建 config.json
 
-v1 最严重的问题。v2 的做法是：`POST /api/auth` 由服务端比对密码，通过则下发一个**随机令牌**，之后所有写操作只认令牌。
+在 `wechat-dashboard` 目录里，把 `config.example.json` **复制一份**，改名为 `config.json`，然后用记事本 / VS Code / 文本编辑器打开，填入你的信息：
+
+```json
+{
+  "appid": "wx你的AppID",
+  "secret": "你的AppSecret",
+  "lookback_days": 7,
+  "article_detail_days": 30,
+  "upstream": "",
+  "upstream_pwd": "你的线上管理密码",
+  "upstream_auto_push": true
+}
+```
+
+字段说明：
+
+| 字段 | 说明 |
+| --- | --- |
+| `appid` | 6.2 拿到的 AppID |
+| `secret` | 6.2 拿到的 AppSecret |
+| `lookback_days` | 按"统计日"往回补几天，日常保持 `7` |
+| `article_detail_days` | 按"发表日"取多少天内发表的文章，默认 `30` |
+| `upstream` | 线上站点地址，**先留空**（第八节再填） |
+| `upstream_pwd` | 线上管理密码，先留空 |
+| `upstream_auto_push` | 采集后是否自动推线上，先留 `true` |
+
+> **安全**：`config.json` 含密钥，**不要发给任何人、不要提交到 Git**（仓库的 `.gitignore` 已排除它）。
+
+### 7.2 第一次采集
+
+**Mac / Linux**：
+
+```bash
+cd ~/wechat-dashboard
+python3 sync.py
+```
+
+**Windows**（命令提示符）：
+
+```bat
+cd /d D:\wechat-dashboard
+python sync.py
+```
+
+首次建议多回溯一些历史，比如 90 天：
+
+```bash
+python3 sync.py --days 90
+```
+
+你会看到一串日志：取 token → 逐日采集 → 补标题 → 生成 data.js。**首次可能要跑几分钟，耐心等它自己结束。**
+
+> **验收点（KR2）**：目录下出现了 `store.json` 和 `data.js`，日志里没有红色报错，最后打印的统计里文章数大于 0。
+
+### 7.3 打开看板
+
+**推荐方式**（功能最全）：启动本地服务
+
+```bash
+python3 serve.py           # Windows 用 python serve.py
+```
+
+终端会打印 `http://127.0.0.1:8000`，浏览器打开它就行。Mac/Linux 也可以直接 `./run.sh`。
+
+**备用方式**：直接双击 `index.html`。能看，但"更新数据""删除"这类需要服务端的功能会提示不可用。
+
+> **验收点（KR3）**：页面顶部 KPI 有数字、趋势图有曲线、文章明细表有行。**如果是空的，说明上一没采到数据，回去看 7.2 的日志。**
+
+### 7.4 认识顶栏的「锁定」按钮
+
+页面默认**锁定（只读）**，任何人打开都只能看。点顶栏最右的「锁定」，输入管理密码才能解锁管理功能。
+
+| 状态 | 能做什么 |
+| --- | --- |
+| **锁定**（默认） | 看图表和明细；点「更新数据」拉取服务端最新版本；临时调布局（仅本次有效） |
+| **已解锁**（输密码后） | 上传数据、回收站、删除/还原、重命名、保存为默认布局、同步到线上 |
+
+- 密码**只存在服务端**，页面源码里没有；解锁后下发 8 小时令牌，关掉页面即失效
+- 再点一次「锁定」立即锁回去
+- **部署前务必改掉默认密码**：本地版改 `serve.py` 里的 `ACCESS_PWD`，线上版设置环境变量 `ADMIN_PWD`
+
+### 7.5 这一步的完整验收清单
+
+- [ ] `config.json` 填好且能拿到 token（KR1）
+- [ ] `sync.py` 跑完无报错，`store.json` / `data.js` 已生成（KR2）
+- [ ] 页面 KPI、趋势图、明细表都有数据（KR3）
+- [ ] 点「锁定」输密码能解锁，刷新后回到锁定状态
+
+## 八、把数据送到线上端
+
+做到第七节，看板只有你自己电脑能看。这一节把它变成"手机也能开"。
+
+### 8.1 先部署线上版
+
+1. 取 `workbuddy-deployment/` 里的全部文件（`index.html`、`server.py`、`vendor/`）
+2. 传到任意能跑 Python 的服务器/云平台
+3. 启动：`python3 server.py`（监听 `PORT` 环境变量，缺省 3000，绑定 `0.0.0.0`）
+4. **设置管理密码**：`export ADMIN_PWD=你的密码` 后再启动（务必不要用默认占位值）
+5. 浏览器打开线上地址，能看到页面（此时还没数据，等本地推过来）
+
+> 线上版**不需要**配 IP 白名单、不需要 AppSecret——它不调微信接口。
+
+### 8.2 让本地采完自动推上去（推荐）
+
+编辑本地的 `config.json`：
+
+```json
+{
+  "upstream": "https://你的线上地址",
+  "upstream_pwd": "你的线上管理密码",
+  "upstream_auto_push": true
+}
+```
+
+之后这些操作**会自动同步，不用你管**：
+
+- 采集成功 → 自动推一次数据
+- 上传数据文件 → 自动推一次
+- 删除 / 还原 / 重命名 → 自动推回收站和命名状态
+
+顶栏「数据更新时间」后面有个「线上：已同步 / 未同步」标记，**点它可以立即手动同步一次**（需密码）。
+
+### 8.3 另外两种上传方式
+
+**方式二：在线上页面直接上传**
+
+1. 打开线上地址 → 点「锁定」输密码解锁
+2. 点「更新数据 → 选择数据文件」
+3. 选中本地生成的 `data.js` → 上传
+
+**方式三：直接把 `data.js` 拷到线上目录**（有服务器访问权限时最快），覆盖 `data.js` 即可。
+
+### 8.4 怎么确认同步成功了
+
+1. 看本地顶栏：**「线上：已同步」**
+2. 打开线上页面，看数据生成时间是否变成刚才的
+3. 本地删一篇文章 → 线上刷新 → 这篇文章也消失了（说明回收站状态同步了）
+
+如果显示「未同步」，鼠标悬停在标记上会看到失败原因。最常见的是**本机暂时访问不了外网**（单位内网限制）——数据已经存在本机，恢复网络后点标记重试即可。每次同步结果都记在 `sync.log` 里。
+
+> **验收点（KR4）**：线上地址能看到和本地一样的数据；本地删一篇，手机上也消失。
+
+### 8.5 线上端的小提醒
+
+- 别人正在看线上页面时，检测到数据更新会在底部弹「数据已更新 → 立即刷新 / 稍后」，由他自己决定何时刷新，不会打断操作
+- **微信里直接打开链接可能被拦**（部分平台网关按 UA 拦截微信内置浏览器），用系统浏览器打开
+- `upstream_auto_push` 设成 `false` 可关掉自动同步，需要时再手动点
+
+## 九、设置每天自动同步
+
+### Mac / Linux（cron）
+
+```bash
+crontab -e
+```
+
+加入一行（路径换成你自己的）：
+
+```cron
+30 8 * * * cd /Users/你的名字/wechat-dashboard && /usr/bin/python3 sync.py >> sync.log 2>&1
+```
+
+### Windows（任务计划程序）
+
+1. 开始菜单搜「任务计划程序」→ 创建基本任务
+2. 触发器：每天，时间 8:30
+3. 操作：启动程序
+   - 程序：`python`（或完整路径 `C:\Python311\python.exe`）
+   - 参数：`sync.py`
+   - 起始位置：`D:\wechat-dashboard`
+4. 勾选「不管用户是否登录都要运行」
+
+### 统信 UOS / 国产 Linux
+
+同 cron，先确认定时服务开着：
+
+```bash
+sudo systemctl status cron     # 没开就 sudo systemctl enable --now cron
+```
+
+> **验收点（KR5）**：第二天 8:30 之后打开看板，数据日期变成了昨天。**故意关一天电脑**，第三天再看——漏跑的日子应该被自动补上（脚本默认往回补 7 天）。
+
+## 十、排障大全（几乎所有你可能遇到的问题）
+
+### 环境与安装
+
+**Q：`python3 --version` 提示"不是内部或外部命令"？**
+Windows 装 Python 时没勾 "Add Python to PATH"。重装一次并勾上，或手动把 Python 目录加进环境变量。
+
+**Q：Windows 上脚本报编码错误（UnicodeDecodeError / gbk）？**
+文件路径或目录名带中文/空格。把整个文件夹挪到纯英文路径，如 `D:\wechat-dashboard`。
+
+**Q：端口被占用？**
+不用管，服务会自动顺延到 8001–8020 并打印实际地址。想固定就 `./run.sh --port 8080`，或在 `config.json` 里加 `"serve_port": 8080`。
+
+**Q：双击 `index.html` 页面是空的？**
+还没采集数据。先跑一次 `python3 sync.py`。另外文件直开模式下部分功能（删除、上传）不可用，请用 `python3 serve.py` 启动服务访问。
+
+### 凭据与权限
+
+**Q：报 `40001` / `40013`？**
+AppSecret 填错或 token 失效。核对 `config.json`（注意别多复制空格），脚本会自动重取 token。
+
+**Q：重置 AppSecret 后老系统也挂了？**
+重置会让旧值立即失效。如果还有别的系统在用，需要同步更新它们。
+
+**Q：报 `48001`？**
+接口未授权。需要公众号**已认证**且具备对应权限。数据接口不受影响的，只是标题可能取不到——可以在明细表标题旁点「命名」手动补。
+
+**Q：我不是管理员，也绑不了运营者？**
+只能请管理员代劳：重置 AppSecret 发给你 + 帮忙填 IP 白名单。
+
+### 网络与白名单
+
+**Q：报 `40164 / not in whitelist`？**
+IP 不在白名单。脚本会打印你当前的公网 IP，把它加进白名单，等 1–2 分钟生效后重跑。详见 6.4。
+
+**Q：明明加了白名单，还是偶尔报错？**
+网络多出口（负载均衡），每次出去的 IP 不同。把报错里出现过的 IP 逐个加进去，或加 CIDR 段。
+
+**Q：换网络 / 重启后不能用了？**
+公网 IP 变了。跑一次脚本，按提示把新 IP 加进去。
+
+**Q：开着 VPN 能用吗？**
+出去的 IP 是 VPN 的，要加 VPN 的出口 IP。建议采集时关掉 VPN。
+
+### 采集与数据
+
+**Q：为什么没有阅读次数（PV）？**
+微信自 2025-11-01 起下线了「阅读次数」，只保留「阅读人数」。历史次数可在公众平台后台「数据统计」里看。
+
+**Q：为什么没有更早的历史数据？**
+微信不提供批量导出历史，新接口数据从 **2025-11-01** 起。从现在开始每天采，数据会越攒越多。
+
+**Q：报 `45009 reach max api daily quota limit`？**
+接口日调用量到顶（按接口分别算，每天 0 点重置）。脚本会暂停该接口的剩余扫描、不会反复重试，未完成的日期**下次运行自动继续**。后台「接口权限模板」可查实时调用量，认证账号每月有 10 次清零机会。
+
+**Q：报 `47009 / this api is offline`？**
+老接口已下线。用本版脚本，别改回旧接口名。
+
+**Q：有些文章标题显示"未获取到标题（xxx）"？**
+脚本会通过「已发布消息列表」自动补全，包括 2025-11-01 之前的老文章。如果仍显示：
+1. 发布列表接口无权限（48001）→ 只能点「命名」手动补
+2. 该文章确实不在发布列表（未发布 / 已删 / 转载）→ 同上手动补
+3. 当天被限流 → **下次运行自动补扫**，不用管。多次不行就 `python3 sync.py --full` 强制全量重扫
+
+**Q：删掉的文章，重新采集后又冒出来了？**
+不会。删除记录写在 `store.json` 的台账里，生成数据时始终过滤。想找回就去回收站恢复。
+
+**Q：发布日期和实际不符？**
+v2 已按「文章日报最早日期」校正。若仍不对，跑一次 `python3 sync.py` 触发重算（日志会打印修正了多少篇）。
+
+### 页面与显示
+
+**Q：图表不显示 / 页面白屏？**
+`vendor/` 文件夹没一起拷过去（echarts 和 xlsx 是离线库）。确认目录里有 `vendor/echarts.min.js`。
+
+**Q：提示"未解锁或登录已过期"？**
+令牌 8 小时过期，点顶栏「锁定」重新输密码。
+
+**Q：手机上布局乱了？**
+窄屏下不提供布局编辑，会用响应式默认布局。想调整请用电脑。
+
+**Q：导出 Excel 中文乱码？**
+用 Excel 直接打开；WPS 一般正常。若仍有问题，检查系统区域设置是否为中文。
+
+### 线上与同步
+
+**Q：本机上传的数据，线上看不到？**
+看顶栏「线上：」标记是否为「已同步」。显示「未同步」时悬停看原因，点标记可手动重试（需密码）。本机访问不了外网时，数据仍完整保存在本机，联网后重试即可。
+
+**Q：微信里打不开线上链接？**
+网关按 UA 拦截了微信内置浏览器，用系统浏览器打开。
+
+**Q：线上页面一直显示旧数据？**
+线上页面需要刷新。检测到更新时底部会弹提示，点「立即刷新」即可。
+
+## 十一、备份、迁移与恢复
+
+**要备份的只有两个文件**：
+
+| 文件 | 为什么 |
+| --- | --- |
+| `config.json` | 含 AppID / AppSecret，丢了要重新重置 |
+| `store.json` | 全部历史累积数据，丢了要从头再采 |
+
+其余（`data.js`、`token.json`、`sync.log`）都能重新生成。
+
+**换机迁移**：
+
+1. 把整个文件夹连同上面两个文件拷到新机器
+2. 装好 Python
+3. **在新机器上重新配 IP 白名单**（IP 变了，这一步最容易忘）
+4. 跑一次 `sync.py` 验证
+
+**恢复误删**：去回收站还原即可，删除记录一直在 `store.json` 里，不会因为重新采集而丢失。
+
+## 十二、进阶：v2 的五个关键改造（含代码）
+
+如果你只想用，前面十一节就够了。想改代码的看这里。
+
+### 改造 1：密码挪到服务端，前端不留密码
+
+v1 最严重的问题。v2 由服务端比对密码，通过则下发随机令牌，写操作只认令牌。
 
 ```python
-# server.py —— 线上服务
+# server.py
 import secrets, threading, time
 
-# 管理密码只保存在服务端；部署前必须通过环境变量 ADMIN_PWD 修改
-PWD = os.environ.get("ADMIN_PWD", "change-me")
-TOKEN_TTL = 8 * 60 * 60      # 解锁令牌有效期：8 小时
-_TOKENS = {}                 # token -> 过期时间戳
+PWD = os.environ.get("ADMIN_PWD", "change-me")   # 部署前必须改
+TOKEN_TTL = 8 * 60 * 60
+_TOKENS = {}
 _TOKEN_LOCK = threading.Lock()
 
 def issue_token():
     with _TOKEN_LOCK:
         now = time.time()
         for k in [k for k, exp in _TOKENS.items() if exp < now]:
-            _TOKENS.pop(k, None)          # 顺手清理过期令牌
-        tok = secrets.token_hex(24)       # 48 位十六进制随机数
+            _TOKENS.pop(k, None)                 # 顺手清理过期令牌
+        tok = secrets.token_hex(24)
         _TOKENS[tok] = now + TOKEN_TTL
         return tok
 
@@ -201,12 +631,10 @@ def check_token(tok):
         return bool(exp and exp > time.time())
 ```
 
-路由层面，密码错误有 0.4 秒延迟，写接口一律只认令牌：
-
 ```python
 if path == "/api/auth":
     if body.get("pwd") != PWD:
-        time.sleep(0.4)                  # 轻微延迟，增加暴力尝试成本
+        time.sleep(0.4)                          # 轻微延迟，增加暴力尝试成本
         self._json({"ok": False, "message": "密码不正确"}, code=403)
         return
     tok = issue_token()
@@ -215,71 +643,44 @@ if path == "/api/auth":
 
 if path in ("/api/state", "/api/data"):
     if not check_token(body.get("token")):
-        self._json({"ok": False, "message": "未解锁或登录已过期，请重新验证"},
-                   code=403)
+        self._json({"ok": False, "message": "未解锁或登录已过期，请重新验证"}, code=403)
         return
 ```
 
-前端相应改成拿令牌、存 `sessionStorage`（关掉页面即失效）：
-
-```javascript
-function submitAuth() {
-  var v = ($('pwd-input').value || '').trim();
-  fetch('/api/auth', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pwd: v })
-  }).then(function (r) {
-    if (r.status === 404) { toast('当前为静态访问，服务端接口不可用'); return null; }
-    return r.json();
-  }).then(function (j) {
-    if (!j) return;
-    if (j.ok) { setAuthSession(j.token); /* 解锁 UI */ }
-    else { toast(j.message || '密码不正确'); }
-  });
-}
-```
-
-**这一步带来的额外好处**：本地版推送数据到线上时，也要先拿令牌——所以本地 `config.json` 里虽然有一份线上密码，但每次请求走的都是临时令牌，密码不会在网络上来回传。
-
-### 改造 2：本地上行同步改用令牌，失效自动重试
+### 改造 2：上行同步改用令牌，失效自动重试
 
 ```python
-# serve.py —— 本地服务推送线上
+# serve.py
 _UP_TOKEN_CACHE = {"key": "", "token": "", "exp": 0}
 
 def _upstream_token(conf):
     key = conf["url"] + "|" + conf["pwd"]
     now = time.time()
     if _UP_TOKEN_CACHE["key"] == key and _UP_TOKEN_CACHE["exp"] > now + 60:
-        return _UP_TOKEN_CACHE["token"]                # 缓存未过期直接复用
-    j = _http_post_json(conf["url"] + "/api/auth",
-                        {"pwd": conf["pwd"]}, timeout=30)
+        return _UP_TOKEN_CACHE["token"]                  # 缓存未过期直接复用
+    j = _http_post_json(conf["url"] + "/api/auth", {"pwd": conf["pwd"]}, timeout=30)
     if j.get("ok") and j.get("token"):
         ttl = int(j.get("expires_in") or 28800)
-        _UP_TOKEN_CACHE.update({"key": key, "token": j["token"],
-                                "exp": now + ttl})
+        _UP_TOKEN_CACHE.update({"key": key, "token": j["token"], "exp": now + ttl})
         return j["token"]
     raise RuntimeError("线上密码验证失败：%s" % (j.get("message") or "未知原因"))
 
 def _up_post(conf, api_path, payload, timeout=30):
     """上行请求：凭临时 token 调线上接口；token 失效自动刷新重试一次。"""
     payload = dict(payload)
-    payload.pop("pwd", None)          # 绝不明文带密码
+    payload.pop("pwd", None)                             # 绝不明文带密码
     payload["token"] = _upstream_token(conf)
     j = _http_post_json(conf["url"] + api_path, payload, timeout=timeout)
     if not j.get("ok"):
         msg = str(j.get("message") or "")
         if "过期" in msg or "未解锁" in msg:
-            _UP_TOKEN_CACHE["exp"] = 0                # 强制刷新
+            _UP_TOKEN_CACHE["exp"] = 0                   # 强制刷新
             payload["token"] = _upstream_token(conf)
             j = _http_post_json(conf["url"] + api_path, payload, timeout=timeout)
     return j
 ```
 
 ### 改造 3：周发文数 / 周阅读数，两种口径
-
-「周」有两种理解，看板上做成可切换的按钮，选择结果记在本机：
 
 ```javascript
 function weekRange() {
@@ -289,7 +690,7 @@ function weekRange() {
   var s = new Date(base + 'T00:00:00');
   if (weekMode === 'mon') {
     var wd = b.getDay();                           // 0 = 周日
-    s.setDate(b.getDate() - (wd === 0 ? 6 : wd - 1));  // 回退到本周一
+    s.setDate(b.getDate() - (wd === 0 ? 6 : wd - 1));   // 回退到本周一
   } else {
     s.setDate(b.getDate() - 6);                    // 含今天往前 7 天
   }
@@ -297,23 +698,17 @@ function weekRange() {
 }
 ```
 
-- **近 7 天**：从最新数据日往前数 6 天，滚动窗口，永远满 7 天
-- **本周**：最新数据日所在自然周的周一至周日，周一时只有 1 天
-
 ### 改造 4：发布日期校正（修掉错标的老 bug）
 
-v1 用 `setdefault` 写入首发日期——**只写一次，之后再也不更新**。补扫历史数据后，几十篇老文章会被错标成"最近几天发的"。
-
-权威口径应该是：**文章在某统计日有数据 → 取最早的那天为发布日期**。
+v1 用 `setdefault` 写入首发日期，**只写一次、永不更新**，补扫历史后老文章会被错标成最近几天。
 
 ```python
-# sync.py —— 保存前统一回填校正
+# sync.py
 def fix_first_dates(store):
     """按「文章日报」重算所有文章的首发日期。
 
     老版本（setdefault）把首次写入的日期固定下来，补扫历史数据后
-    也不会更新，导致多篇老文章被错标为最近几天的日期。
-    权威口径：文章在某统计日有数据 → 取最早的那天为发布日期。
+    也不会更新。权威口径：文章在某统计日有数据 → 取最早的那天为发布日期。
     """
     fixed = 0
     daily = store.get("article_daily", {}) or {}
@@ -330,29 +725,7 @@ def fix_first_dates(store):
         log("  发布日期校正：%d 篇按文章日报取最早日期修正" % fixed)
 ```
 
-前端也同步算一遍，保证不刷新服务端也能看到正确日期：
-
-```javascript
-var firstSeen = {};
-Object.keys(articleDaily).forEach(function (d) {
-  Object.keys(articleDaily[d]).forEach(function (m) {
-    var x = articleDaily[d][m];
-    var a = dailyByArticle[m] || (dailyByArticle[m] = { read: 0, share: 0, fav: 0 });
-    a.read += int(x.read_user);
-    a.share += int(x.share_user);
-    a.fav += int(x.collection_user);
-    if (!firstSeen[m] || d < firstSeen[m]) firstSeen[m] = d;   // 取最早
-  });
-});
-
-function pubdateOf(m) {
-  return firstSeen[m] || ((articles[m] || {}).first_date) || '';
-}
-```
-
 ### 改造 5：趋势图加比例尺
-
-数据一多，趋势图挤成一团。ECharts 的 `dataZoom` 用「内部 + 底部滑块」双通道，鼠标滚轮、触屏双指、拖滑块都能缩放：
 
 ```javascript
 grid: { left: 48, right: 14, top: 30, bottom: 58 },   // 底部留 58px 给滑块
@@ -360,180 +733,22 @@ dataZoom: [
   { type: 'inside', xAxisIndex: 0, zoomOnMouseWheel: true,
     moveOnMouseMove: true, moveOnMouseWheel: false },
   { type: 'slider', xAxisIndex: 0, height: 20, bottom: 6,
-    borderColor: 'transparent', backgroundColor: 'rgba(0,0,0,.04)',
     fillerColor: 'rgba(37,99,235,.12)',
     handleStyle: { color: '#fff', borderColor: '#2563eb' },
-    labelFormatter: function (v) {
-      return String(v).slice(5);        // 只显示 MM-DD，避免拥挤
-    }
-  }
+    labelFormatter: function (v) { return String(v).slice(5); } }  // 只显示 MM-DD
 ],
 ```
-
-再配一排快捷按钮（全部 / 近90天 / 近30天 / 近7天），手动拖滑块时自动取消按钮高亮，避免状态不一致：
-
-```javascript
-function bindTrendZoom(c) {
-  if (!c) return;
-  c.off('dataZoom');
-  c.on('dataZoom', function () { if (!zoomByBtn) clearZoomBtn(); });
-  var bar = $('trend-zoom');
-  if (bar && !bar._bound) {
-    bar._bound = true;
-    bar.addEventListener('click', function (e) {
-      var b = e.target && e.target.closest ? e.target.closest('[data-zoom]') : null;
-      if (!b) return;
-      setTrendZoom(b.getAttribute('data-zoom'));
-    });
-  }
-  markZoomBtn('all');
-}
-```
-
-## 七、完整源码获取与目录结构
-
-v2 的 `index.html` 已经一千多行、一百多 KB，全贴进文章既没意义也没法复制。完整源码放在 GitHub：
-
-> **https://github.com/Yellowsoy/gzh-data-dashboard**（MIT 协议）
-
-```
-gzh-data-dashboard/
-├── README.md                     # 完整技术文档
-├── LICENSE                       # MIT
-├── local-deployment/             # 版本一：本地电脑部署
-│   ├── index.html                # 看板页面（单文件）
-│   ├── serve.py                  # 本地服务：采集调度 + 写接口 + 上行同步
-│   ├── sync.py                   # 微信官方接口采集脚本
-│   ├── config.example.json       # 配置模板
-│   ├── run.sh / stop.sh          # 一键启动 / 停止
-│   └── vendor/                   # echarts / xlsx 离线库
-└── workbuddy-deployment/         # 版本二：线上部署
-    ├── index.html
-    ├── server.py                 # 静态资源 + 同步 API + 令牌鉴权
-    └── vendor/
-```
-
-拿到源码后，**唯一需要你手写的文件**是 `config.json`：
-
-```json
-{
-  "_说明": "复制本文件为 config.json 并填入你自己的公众号凭据；config.json 含密钥，已被 .gitignore 排除，切勿提交或外发",
-  "appid": "wx你的AppID",
-  "secret": "你的AppSecret",
-  "lookback_days": 7,
-  "article_detail_days": 30,
-  "upstream": "",
-  "upstream_pwd": "你的线上管理密码",
-  "upstream_auto_push": true
-}
-```
-
-字段说明：
-
-字段 | 说明
---- | ---
-`lookback_days` | 按"统计日"往回补几天，日常保持 `7`
-`article_detail_days` | 按"发表日"取多少天内发表的文章，默认 `30`
-`upstream` | 线上站点地址，**留空就是纯本地，不同步**
-`upstream_pwd` | 线上写接口密码（与管理密码一致）
-`upstream_auto_push` | 采集完成后是否自动推送线上
-
-## 八、手把手：两种部署方式
-
-### 方式 A：本地电脑部署（推荐先跑通这个）
-
-```bash
-cd local-deployment
-cp config.example.json config.json
-# 编辑 config.json，填入 appid / secret
-./run.sh            # 启动，默认 http://127.0.0.1:8000
-./stop.sh           # 停止
-```
-
-启动后：
-
-1. 打开页面，点顶栏「锁定」按钮，**输入管理密码解锁**
-2. 点「数据更新」触发采集（服务端子进程跑 `sync.py`，有防重入）
-3. 采完自动写入本机 `data.js`；若配了 `upstream`，会自动推到线上
-
-`run.sh` 的几个参数：
-
-```bash
-./run.sh                 # 启动服务并尝试打开浏览器
-./run.sh --port 8080     # 指定端口
-./run.sh --no-browser    # 不自动开浏览器
-./run.sh --sync-only     # 只跑一次采集，不启动服务（等价 v1 行为）
-```
-
-> **部署前务必改掉默认密码**。仓库里的默认值是占位符 `change-me`，本地版改 `serve.py` 里 `ACCESS_PWD`，线上版设置环境变量 `ADMIN_PWD` 后重启。
-
-### 方式 B：线上部署（给别人看 / 手机上也能开）
-
-1. 取 `workbuddy-deployment/` 全部文件
-2. 传到任意能跑 Python 的环境，启动：`python3 server.py`
-3. 服务监听 `PORT` 环境变量（缺省 3000），绑定 `0.0.0.0`
-4. 数据不用手动传——本地采完会自动推；也可以在线上页面用「上传数据文件」手动覆盖
-
-## 九、设置每天自动同步
-
-```cron
-# 每天 8:30 自动采集（Linux / macOS / 统信 UOS）
-30 8 * * * cd /path/to/local-deployment && /usr/bin/python3 sync.py >> sync.log 2>&1
-```
-
-编辑方式：终端执行 `crontab -e`，粘贴上面一行，路径换成你自己的。Windows 用「任务计划程序」，触发器选"每天"，操作填 `python` 和 `sync.py` 的完整路径。
-
-> 漏跑不用慌，下次运行会自动补最近约 7 天。
-
-## 十、看板功能说明
-
-**关键指标**：累计粉丝、最新日净增、近 7 天阅读/分享人数、文章总数、**周发文数 / 周阅读数**（两种口径可切换）
-
-**图表**：阅读与分享趋势（带比例尺缩放）、阅读来源构成、粉丝趋势、文章排行
-
-**文章明细**：搜索（支持拼音首字母）、日期筛选、排序、分页、按时间范围导出 Excel
-
-**回收站**：删除 / 还原 / 彻底删除，状态云端同步；**未解锁时入口完全隐藏**（不只在视觉上隐藏，是 DOM 层面就没有）
-
-**布局自定义**：模块可拖拽调位置和大小，分两级——临时布局只影响本次查看；默认布局输入密码保存到云端，所有设备生效
-
-## 十一、常见问题与错误码速查
-
-**Q：提示 40164 / "invalid ip"？**
-出口 IP 不在白名单。脚本会打印你当前的公网 IP，去「基本配置 → IP白名单」加上，等 1–2 分钟生效。
-
-**Q：提示 48001？**
-接口未授权。确认公众号已通过微信认证，且具备对应接口权限。
-
-**Q：提示"未解锁或登录已过期"？**
-令牌 8 小时过期，点顶栏「锁定」重新输密码。
-
-**Q：微信里打不开线上链接？**
-部分托管平台的网关会按 UA 拦截微信内置浏览器，用系统浏览器打开即可。
-
-**Q：发布日期和实际不符？**
-v2 已按「文章日报最早日期」校正。若仍不对，跑一次 `./run.sh --sync-only` 触发 `fix_first_dates()` 重算。
-
-**Q：换网络 / 重启后不能用了？**
-多半是公网 IP 变了，跑一次脚本，按提示把新 IP 加进白名单。
-
-## 十二、后续维护与备份
-
-- **每天**：定时任务到点自动采集，刷新页面即可
-- **漏跑**：下次运行自动补最近约 7 天
-- **备份**：只需保留 **`config.json`** 和 **`store.json`**，其余都能重新生成
-- **换机迁移**：整个文件夹连同这两个文件一起拷走，在新机器配好 IP 白名单即可
-- **安全**：`config.json` 含 AppSecret，**已被 `.gitignore` 排除**，不要提交到任何仓库
 
 ---
 
 ## 写在最后
 
-v2 相比 v1，代码量翻了一倍多，但**"零成本"这条底线没有破**：依然不买服务器、不装数据库、不依赖云服务，Python 端依然只用标准库。
+v2 的代码量比 v1 翻了一倍多，但**"零成本"这条底线没破**：依然不买服务器、不装数据库、不依赖云服务，Python 端依然只用标准库。
 
-回头看，最值钱的经验不是某段代码，而是这两条：
+回头看，最值钱的经验不是某段代码，而是这三条：
 
 1. **动手前先把平台边界搞清楚**——哪些是接口能力问题，哪些是网络环境问题。分清楚这个，就不会在"为什么不行"上反复打转。
-2. **凡是和用户身份有关的判断，一律放在服务端**。前端做权限校验，本质上等于没做——v1 的密码裸奔就是这么来的。
+2. **凡是和身份有关的判断，一律放服务端**。前端做权限校验本质上等于没做——v1 的密码裸奔就是这么来的。
+3. **给每一步定一个可验证的验收点**。本文那张 OKR 表不是形式主义：它让你在任何一步卡住时，都能立刻知道是"哪一步没过"，而不是对着一个不工作的系统发呆。
 
-如果你也在做类似的事，希望这篇能帮你少走几段弯路。源码在 [GitHub](https://github.com/Yellowsoy/gzh-data-dashboard)，有问题欢迎提 Issue。
+源码在 [GitHub](https://github.com/Yellowsoy/gzh-data-dashboard)（MIT），有问题欢迎提 Issue。希望这篇能帮你少走几段弯路。
