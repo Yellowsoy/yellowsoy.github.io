@@ -1,8 +1,9 @@
 ---
 layout:     post
 title:      "公众号数据看板：从零开始，小白也能搭起来"
-subtitle:   " "零成本、不装数据库；附全部完整源码，复制即可运行""
+subtitle:   " \"零成本、不装数据库；附全部完整源码，复制即可运行\""
 date:       2026-10-13 12:00:00
+permalink:  /2026/10/13/wechat-dashboard/
 author:     "Yellowsoy"
 header-img: "img/post-bg-2015.jpg"
 catalog: true
