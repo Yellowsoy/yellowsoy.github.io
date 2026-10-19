@@ -259,6 +259,8 @@ curl "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid
 
 下面 6 个文件**全部放在同一个目录**（第四节建好的那个），文件名必须一字不差。
 
+> 阅读提示：体积较大的源码已折叠，**点击带箭头的标题即可展开完整内容**（小文件如 `config.json` 直接展示）。
+
 文件 | 作用 | 需要你改吗
 --- | --- | ---
 `config.json` | 配置：AppID / AppSecret / 同步设置 | ✅ **必须填**
@@ -414,6 +416,9 @@ fi
 ### 文件 4：`sync.py`（采集脚本，核心）
 
 > 这是整个项目最关键的文件，负责换令牌、调微信接口、合并数据、生成 `data.js`。**原样复制即可，不用改。**
+
+<details markdown="1">
+<summary>点击展开完整源码：sync.py（39.8 KB，约 933 行）</summary>
 
 ```python
 #!/usr/bin/env python3
@@ -1351,10 +1356,15 @@ if __name__ == "__main__":
         pass
 ```
 
+</details>
+
 ### 文件 5：`serve.py`（本地服务）
 
 > 提供看板页面、写接口（删除/重命名/上传）、调度采集、同步线上。
 > **部署前请把 `ACCESS_PWD` 改成你自己的密码**（默认只是占位符）。
+
+<details markdown="1">
+<summary>点击展开完整源码：serve.py（31.1 KB，约 824 行）</summary>
 
 ```python
 #!/usr/bin/env python3
@@ -2183,10 +2193,15 @@ if __name__ == "__main__":
     main()
 ```
 
+</details>
+
 ### 文件 6：`index.html`（看板页面）
 
 > 这个文件**本地版和线上版完全共用**，内容较长（含全部图表与交互逻辑，依赖同目录 `vendor/` 下的两个库文件）。
 > 原样复制保存，不要改动。
+
+<details markdown="1">
+<summary>点击展开完整源码：index.html（125.4 KB，约 2283 行）—— 本地版与线上版共用</summary>
 
 ```html
 <!DOCTYPE html>
@@ -4474,6 +4489,8 @@ window.addEventListener('load', function () {
 </html>
 ```
 
+</details>
+
 > ⚠️ 别忘了 `vendor/` 目录：页面需要 `vendor/echarts.min.js`（图表）和 `vendor/xlsx.full.min.js`（导出 Excel）。
 > 这两个是第三方库，体积较大（约 1.9 MB），**请从仓库直接下载**：
 > https://github.com/Yellowsoy/gzh-data-dashboard/tree/main/local-deployment/vendor
@@ -4547,6 +4564,9 @@ python3 serve.py           # Windows 用 python serve.py
 
 > 线上版**只需要 3 样东西**：`server.py`、`index.html`（和本地版**同一个文件**，第六节那个）、`vendor/`。
 > 它不调微信接口，所以**不需要 AppSecret、不需要配 IP 白名单**。
+
+<details markdown="1">
+<summary>点击展开完整源码：server.py（11.9 KB，约 329 行）</summary>
 
 ```python
 #!/usr/bin/env python3
@@ -4879,6 +4899,8 @@ def main():
 if __name__ == "__main__":
     main()
 ```
+
+</details>
 
 ### 部署步骤
 
@@ -5240,6 +5262,9 @@ SOFTWARE.
 
 ### 文件 12：`README.md`（仓库主技术文档）
 
+<details markdown="1">
+<summary>点击展开完整内容：README.md（16.3 KB，约 315 行，仓库主技术文档）</summary>
+
 ````markdown
 # 微信公众号数据看板
 
@@ -5558,7 +5583,12 @@ window.DATA = {
 本项目在开发过程中使用了 WorkBuddy（https://www.workbuddy.cn ）作为云端部署与测试平台。
 ````
 
+</details>
+
 ### 文件 13：`local-deployment/README.md`（本地部署详细说明）
+
+<details markdown="1">
+<summary>点击展开完整内容：local-deployment/README.md（21.9 KB，约 407 行，本地部署详细说明）</summary>
 
 ````markdown
 # 微信公众号数据看板（本地版 · 方案A · v7）
@@ -5969,6 +5999,8 @@ A：可以。搜索框直接输入拼音首字母，如 `dwst` 匹配「单位�
 **Q：本机上传的数据，线上页面看不到？**
 A：先看顶栏「线上：」标记是否为「已同步」。显示「未同步」时把鼠标悬停在标记上可看到失败原因，也可点该标记手动同步一次（需密码）。若本机无法访问外网，数据仍完整保存在本机，联网后重试即可。线上页面需刷新（或点底部提示的「立即刷新」）后才会显示新数据。
 ````
+
+</details>
 
 ## 附录 B：两个离线库文件（vendor/）的获取方式
 
