@@ -31,11 +31,11 @@ tags:
 
 **桌面端**：顶部 7 个关键指标，下面是阅读 / 分享趋势、阅读来源构成、粉丝增长、文章阅读 Top 10 和文章明细表。
 
-![桌面端效果](/img/dashboard-demo-desktop.png)
+![桌面端效果](/img/in-post/post-wechat-dashboard/dashboard-demo-desktop.png)
 
 **手机端**：同一份数据，自动适配手机屏幕，无横向滚动。
 
-![手机端效果](/img/dashboard-demo-mobile.png)
+![手机端效果](/img/in-post/post-wechat-dashboard/dashboard-demo-mobile.png)
 
 * * *
 
