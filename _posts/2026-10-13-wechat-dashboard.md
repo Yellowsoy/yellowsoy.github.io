@@ -23,7 +23,9 @@ tags:
 >
 > **源码仓库（建议先收藏，本文所有代码均出自这里）**
 > **https://github.com/Yellowsoy/gzh-data-dashboard**
-> 本文全部代码与该仓库 `main` 分支**逐字一致**；仓库 18 个文件中每一份在本文的对应位置，见文末「附录 A」的对照表。
+> 本文给出的**本地版 6 个文件 + 线上版 1 个文件**与该仓库 `main` 分支**逐字一致**；
+> 仓库另有 `edgeone-deployment/`（EdgeOne Pages 无服务器版，15 个文件），核心代码见「第七章 · 补充」；
+> 每一份文件在本文的对应位置，见文末「附录 A」的对照表。
 
 ## 先看效果
 
@@ -4578,7 +4580,7 @@ python3 serve.py           # Windows 用 python serve.py
 > 它不调微信接口，所以**不需要 AppSecret、不需要配 IP 白名单**。
 
 <details markdown="1">
-<summary>点击展开完整源码：server.py（11.9 KB，约 329 行）</summary>
+<summary>点击展开完整源码：server.py（11.9 KB，约 342 行）</summary>
 
 ```python
 #!/usr/bin/env python3
@@ -4611,6 +4613,16 @@ STATE_PATH = os.path.join(BASE, "state.json")
 DATA_PATH = os.path.join(BASE, "data.js")
 MAX_BODY = 12 * 1024 * 1024  # 12MB
 TOKEN_TTL = 8 * 60 * 60      # 解锁令牌有效期：8 小时
+
+# 页脚版权：通过环境变量 FOOTER_TEXT 设置，例如
+#   FOOTER_TEXT="© 2026 你的站名 丨 蜀ICP备XXXXXXXX号"
+# 留空则不在页面注入页脚
+FOOTER_TEXT = os.environ.get("FOOTER_TEXT", "")
+FOOTER_HTML = (
+    '<footer style="text-align:center;padding:16px 0 20px;'
+    'font-size:12px;line-height:1.6;color:#9aa0a6;letter-spacing:.2px">'
+    + FOOTER_TEXT + "</footer>"
+) if FOOTER_TEXT else ""
 
 _TOKENS = {}                 # token -> 过期时间戳
 _TOKEN_LOCK = threading.Lock()
@@ -4771,6 +4783,9 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             self._json({"ok": False, "message": "not found"}, code=404)
             return
+        # 设置了 FOOTER_TEXT 时，在网页底部注入版权页脚
+        if rel.endswith(".html") and FOOTER_HTML and b"</body>" in body:
+            body = body.replace(b"</body>", FOOTER_HTML.encode("utf-8") + b"</body>", 1)
         ext = os.path.splitext(fp)[1].lower()
         self.send_response(200)
         self.send_header("Content-Type", CONTENT_TYPE.get(ext, "application/octet-stream"))
@@ -4975,6 +4990,275 @@ python3 server.py
 - **微信里直接打开链接可能被拦**（部分平台网关按 UA 拦截微信内置浏览器），用系统浏览器打开
 - `upstream_auto_push` 设成 `false` 可关掉自动同步，需要时再手动点
 
+### 补充：版本三 —— EdgeOne Pages 无服务器部署（2026-10-21 新增）
+
+> 第七章前面讲的「文件 7：`server.py`」是**有服务器**的做法：得有一台常开的机器跑 Python。
+> 如果不想维护服务器，可以用 **EdgeOne Pages**：页面静态托管 + 边缘函数处理接口，**免费额度足够用**，代码推送到 GitHub 即自动部署。
+
+**它和 `server.py` 版的分工**
+
+| 能力 | EdgeOne 版怎么做 |
+| --- | --- |
+| 看板页面 | 静态 `index.html`（与本地版同一份文件） |
+| 数据读取 | `edge-functions/data.js.js` → 对外是 `/data.js` |
+| 管理鉴权 | `edge-functions/api/auth.js`，下发临时令牌 |
+| 数据写入 | `edge-functions/api/data.js`，写对象存储 |
+| 状态同步 | `edge-functions/api/state.js`，回收站 / 手动命名 / 布局 |
+| 页脚版权 | `edge-functions/api/site.js` 返回 `FOOTER_TEXT`，前端注入 |
+
+**为什么不能直接用 `server.py`**
+
+边缘运行时**没有** `process`、`os`、`Buffer`、`crypto.randomBytes`，也**没有可写的文件系统**，而且多个实例之间**不共享内存**。原来那套「把令牌存在内存字典里、把 `data.js` 写进磁盘」的做法全部失效。所以改成两件事：
+
+1. **令牌改为无状态签名**：`令牌 = base64url(载荷) + "." + base64url(HMAC-SHA256(载荷, 管理密码))`，载荷里带 `exp`（8 小时后失效）和一段随机数。服务端只验算签名，什么都不存。
+2. **数据与状态写入对象存储（Blob）**，所有实例读到的都是同一份。
+
+**目录结构**
+
+```text
+edgeone-deployment/
+├── index.html                    # 与本地版同一份页面
+├── package.json                  # 只有一个依赖：@edgeone/pages-blob
+├── lib/
+│   ├── blob.js                   # 对象存储读写封装
+│   ├── auth.js                   # 浏览器标准的 Web Crypto 令牌
+│   └── http.js                   # JSON 响应 / 请求体大小限制
+├── edge-functions/
+│   ├── data.js.js                # 对外路径 /data.js
+│   └── api/
+│       ├── auth.js               # 密码换令牌
+│       ├── logout.js  site.js  status.js
+│       ├── data.js  data/full.js # 数据元信息 / 全量
+│       └── state.js              # 回收站、命名、布局
+└── vendor/                       # 同附录 B 的两个离线库
+```
+
+**四个一定要知道的坑（都是实测踩出来的）**
+
+1. **目录名必须是 `edge-functions`**。写成 `functions` 会整个目录 404，接口一个都不通。
+2. **文件名末尾的 `.js` 会被平台当作后缀剥掉**。想对外暴露 `/data.js`，文件必须命名为 `data.js.js`。
+3. **没有 Node 内置模块**。不能用 `process.env` 读环境变量（要从函数的 `env` 参数取），不能用 `Buffer`、`crypto.randomBytes`；可用的是 `crypto.subtle`、`btoa`、`TextEncoder`。
+4. **不要建 `edge-functions/index.js`**，它会把静态首页顶掉，访问根路径会变成函数响应。
+
+**部署步骤**
+
+1. 在 EdgeOne Pages 新建项目，来源选 **GitHub**，选中你的仓库；**根目录填 `edgeone-deployment`**，分支选 `main`。
+2. 在「环境变量」里加三项：`ADMIN_PWD`（管理密码）、`FOOTER_TEXT`（页脚文字，可留空）、`GZH_STORE_NAME`（对象存储空间名，默认 `gzh-data`）。
+3. 推代码到 `main`，平台自动构建，构建日志显示成功即可。
+4. 在「域名管理」里绑定自己的域名，把平台给出的 CNAME 记录值填到你的 DNS 服务商。
+
+> ⚠️ **平台自动分配的 `*.edgeone.cool` 域名是预览通道**，访问时必须带一次性令牌（响应码 401，提示 `eo_time missing`）。**正式使用一定要绑定自己的域名**，否则别人打不开。
+
+**三个核心文件的完整源码**
+
+<details markdown="1">
+<summary>点击展开完整源码：lib/auth.js（无状态令牌）（lib/auth.js）</summary>
+
+```javascript
+/**
+ * 管理密码验证 —— 无状态令牌（Edge Runtime / Web Crypto 实现）
+ *
+ * 运行环境没有 Node 的 crypto.randomBytes / Buffer，也没有内存态（多实例不共享），
+ * 所以令牌不存服务端，而是用 ADMIN_PWD 派生密钥做 HMAC-SHA256 签名：
+ *   token = base64url(payload) + "." + base64url(HMAC-SHA256(payload))
+ * payload = {"exp": 过期毫秒时间戳, "rnd": 随机串}
+ * 校验时重算签名并比对（定长比较），同时检查 exp。服务端无需保存任何会话。
+ */
+const TTL_MS = 8 * 60 * 60 * 1000; // 8 小时，与原 Python 版一致
+
+const encoder = new TextEncoder();
+
+function b64u(bytes) {
+  let bin = "";
+  const arr = new Uint8Array(bytes);
+  for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64uDecode(str) {
+  const s = String(str).replace(/-/g, "+").replace(/_/g, "/");
+  const pad = s.length % 4 ? "=".repeat(4 - (s.length % 4)) : "";
+  const bin = atob(s + pad);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function hmacKey(secret) {
+  return crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+}
+
+async function sign(payloadB64, secret) {
+  const key = await hmacKey(secret);
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payloadB64));
+  return b64u(sig);
+}
+
+/* 管理密码来自环境变量；未配置时返回空串，调用方据此拒绝所有写操作 */
+export function adminPwd(env) {
+  const v = (env && (env.ADMIN_PWD || env.admin_pwd)) || "";
+  return String(v);
+}
+
+/* 定长比较，避免通过响应时间差猜签名 */
+function safeEqual(a, b) {
+  const x = String(a);
+  const y = String(b);
+  let diff = x.length ^ y.length;
+  const n = Math.max(x.length, y.length);
+  for (let i = 0; i < n; i++) diff |= (x.charCodeAt(i) || 0) ^ (y.charCodeAt(i) || 0);
+  return diff === 0;
+}
+
+function randomHex(nBytes) {
+  const buf = new Uint8Array(nBytes);
+  crypto.getRandomValues(buf);
+  let s = "";
+  for (let i = 0; i < buf.length; i++) s += buf[i].toString(16).padStart(2, "0");
+  return s;
+}
+
+export async function issueToken(env) {
+  const payload = JSON.stringify({ exp: Date.now() + TTL_MS, rnd: randomHex(8) });
+  const pb = b64u(encoder.encode(payload));
+  const sig = await sign(pb, adminPwd(env));
+  return pb + "." + sig;
+}
+
+export async function verifyToken(tok, env) {
+  const pwd = adminPwd(env);
+  if (!pwd || typeof tok !== "string") return false;
+  const dot = tok.indexOf(".");
+  if (dot <= 0) return false;
+  const pb = tok.slice(0, dot);
+  const sig = tok.slice(dot + 1);
+  let expected;
+  try {
+    expected = await sign(pb, pwd);
+  } catch (e) {
+    return false;
+  }
+  if (!safeEqual(sig, expected)) return false;
+  try {
+    const payload = JSON.parse(new TextDecoder().decode(b64uDecode(pb)));
+    return typeof payload.exp === "number" && payload.exp > Date.now();
+  } catch (e) {
+    return false;
+  }
+}
+
+export async function checkPassword(input, env) {
+  const pwd = adminPwd(env);
+  if (!pwd || typeof input !== "string") return false;
+  return safeEqual(input, pwd);
+}
+
+export const TOKEN_TTL_MS = TTL_MS;
+```
+
+</details>
+
+<details markdown="1">
+<summary>点击展开完整源码：lib/blob.js（对象存储读写）（lib/blob.js）</summary>
+
+```javascript
+/**
+ * Blob 存储封装（EdgeOne Pages Blob）
+ *
+ * 平台在构建时会把 PAGES_BLOB_DEPLOY_CREDENTIAL / PAGES_PROJECT_ID 注入运行环境，
+ * 函数内直接 getStore(name) 即可读写，无需在代码里放任何密钥。
+ * 注意：必须静态 import（Edge Runtime 不支持动态 import()）。
+ */
+import { getStore } from "@edgeone/pages-blob";
+
+const DEFAULT_STORE = "gzh-data";
+
+export function storeName(env) {
+  return (env && (env.GZH_STORE_NAME || env.gzh_store_name)) || DEFAULT_STORE;
+}
+
+function store(env) {
+  return getStore(storeName(env));
+}
+
+/* 读文本；不存在返回 null */
+export async function getText(env, key) {
+  const v = await store(env).get(key, { type: "text" });
+  if (v === null || v === undefined) return null;
+  return typeof v === "string" ? v : String(v);
+}
+
+export async function getJSON(env, key) {
+  const t = await getText(env, key);
+  if (!t) return null;
+  try {
+    return JSON.parse(t);
+  } catch (e) {
+    return null;
+  }
+}
+
+/* 写文本：强一致 + 不缓存，保证写完立刻读到新值 */
+export async function setText(env, key, value, contentType = "text/plain; charset=utf-8") {
+  await store(env).set(key, value, { contentType, cacheControl: "no-store" });
+}
+
+export async function setJSON(env, key, obj) {
+  await setText(env, key, JSON.stringify(obj), "application/json; charset=utf-8");
+}
+
+export async function del(env, key) {
+  try {
+    await store(env).delete(key);
+  } catch (e) {
+    /* 删除失败不影响主流程 */
+  }
+}
+```
+
+</details>
+
+<details markdown="1">
+<summary>点击展开完整源码：edge-functions/data.js.js（对外 /data.js）（edge-functions/data.js.js）</summary>
+
+```javascript
+/**
+ * GET /data.js —— 前端用 <script src="data.js"> 同步加载数据
+ *
+ * EdgeOne Pages 的函数文件名会剥离末尾 .js，所以要暴露 /data.js 这个路径，
+ * 文件必须命名为 data.js.js（映射规则：/x.js ← edge-functions/x.js.js）。
+ * 数据本身存在 Blob，仓库里不含任何真实数据（公开仓库需完全脱敏）。
+ */
+import { getText } from "../lib/blob.js";
+
+const KEY = "data.js";
+
+const EMPTY = 'window.DATA = {"generated_at":"","articles":{},"article_daily":{},"biz_daily":{},"user_daily":{}};\n' +
+  'window.DATA_GENERATED_AT = "";\n';
+
+export default async function onRequest({ env }) {
+  let body = null;
+  try {
+    body = await getText(env, KEY);
+  } catch (e) {
+    body = null;
+  }
+  const out = body && body.indexOf("window.DATA") >= 0 ? body : EMPTY;
+  return new Response(out, {
+    headers: {
+      "Content-Type": "application/javascript; charset=utf-8",
+      "Cache-Control": "no-store"
+    }
+  });
+}
+```
+
+</details>
+
+**本地采集端怎么连过来**
+
+把 `local-deployment/config.json` 里的 `upstream` 改成新域名即可，其余不用动。新版 `serve.py` 还内置了**双地址自动回退**：自定义域名不可达时会自动改用平台预设域名，`sync.log` 里会记下实际用的是哪个地址。
+
 ## 八、设置每天自动同步
 
 ### Mac / Linux（cron）
@@ -5142,8 +5426,17 @@ IP 不在白名单。脚本会打印你当前的公网 IP，把它加进白名�
 | `local-deployment/README.md` | 21.9 KB | 附录 A · 文件 13 |
 | `local-deployment/vendor/`（2 个库） | 1.87 MB | 附录 B · 获取命令 + 校验值 |
 | `workbuddy-deployment/vendor/`（2 个库） | 1.87 MB | 同附录 B（内容完全相同） |
+| `edgeone-deployment/index.html` | 127 KB | 与「文件 6」同源，另含页脚注入脚本 |
+| `edgeone-deployment/lib/auth.js` | 3.2 KB | 第七章 · 补充（完整源码） |
+| `edgeone-deployment/lib/blob.js` | 1.5 KB | 第七章 · 补充（完整源码） |
+| `edgeone-deployment/lib/http.js` | 0.7 KB | 仓库内，与 `lib/auth.js` 同节说明 |
+| `edgeone-deployment/edge-functions/data.js.js` | 1.0 KB | 第七章 · 补充（完整源码） |
+| `edgeone-deployment/edge-functions/api/*.js` | 共 10.3 KB | 仓库内，接口与第七章 `server.py` 一一对应 |
+| `edgeone-deployment/package.json` | 0.3 KB | 仓库内，唯一依赖 `@edgeone/pages-blob` |
+| `edgeone-deployment/vendor/`（2 个库） | 1.87 MB | 同附录 B（内容完全相同） |
 
-> 合计 18 个文件，除 4 个第三方库文件外，**其余 14 个文件的完整内容全部已在本文中给出**。
+> 合计 33 个文件：其中**本地版 6 个 + 线上版 1 个 = 7 个运行必需文件**，以及 EdgeOne 版 3 个核心文件，完整内容已在本文给出；
+> EdgeOne 版其余接口文件与 `server.py` 版一一对应，可直接参考第七章；6 个第三方库文件见附录 B。
 
 ### 文件 8：`.gitignore`
 
@@ -5201,6 +5494,30 @@ SOFTWARE.
 
 本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.1.0] - 2026-10-21
+
+### 新增
+
+- **EdgeOne Pages 部署版本**（`edgeone-deployment/`）：静态前端 + Edge Functions + Blob 存储，无需自备服务器
+  - 数据存 Blob（`data.js` / `state.json` / `data.meta.json`），仓库内不含任何真实统计数据
+  - 鉴权改为 HMAC-SHA256 无状态令牌，服务端不保存会话，适配 Serverless 多实例与冷启动
+  - 页脚版权通过环境变量 `FOOTER_TEXT` + `/api/site` 接口下发，公开仓库不含具体文案
+  - 附部署说明，记录 EdgeOne Pages 函数路由实测结论（`edge-functions/` 才稳定生效、扩展名会被剥离等）
+
+### 修复
+
+- 刷新页面时误弹「登录已过期，请重新解锁后再操作」：`pushCloud()` 原先在推送前就把本地 `rev` 写成 `Date.now()`，推送失败（如令牌过期返回 403）后本地游标永久偏大，每次刷新都会触发自动同步并再次 403，形成循环提示
+  - 自动同步改为静默模式（`pushCloud(true)`），失败不弹提示
+  - 403 时静默把本地游标回退为服务端 `rev`，打破循环
+  - 未解锁时不发起自动推送（无令牌必然 403），改由用户解锁后的操作触发
+  - `probeBackends()` 检测到本地游标偏大时同样静默回退
+
+## [1.0.2] - 2026-10-19
+
+### 新增
+
+- 线上服务支持页脚版权注入：设置环境变量 `FOOTER_TEXT` 后，返回网页时在 `</body>` 前追加 `© xxx 丨 ICP备案号` 样式的居中页脚；不影响本地/线上共用的 `index.html`
+
 ## [1.0.1] - 2026-10-19
 
 ### 安全
@@ -5233,7 +5550,7 @@ SOFTWARE.
 ### 已知问题
 
 - 微信内直接打开托管链接会被平台网关按 UA 拦截，需在外部浏览器打开
-````
+````````
 
 ### 文件 11：`CONTRIBUTING.md`
 
@@ -5275,7 +5592,7 @@ SOFTWARE.
 ### 文件 12：`README.md`（仓库主技术文档）
 
 <details markdown="1">
-<summary>点击展开完整内容：README.md（16.3 KB，约 315 行，仓库主技术文档）</summary>
+<summary>点击展开完整内容：README.md（16.3 KB，约 334 行，仓库主技术文档）</summary>
 
 ````markdown
 # 微信公众号数据看板
@@ -5293,6 +5610,18 @@ SOFTWARE.
 > **两个部署版本**
 > - [`local-deployment/`](local-deployment/) —— 在单位内网电脑上运行，自动采集公众号数据，并同步到线上
 > - [`workbuddy-deployment/`](workbuddy-deployment/) —— 部署到 [WorkBuddy](https://www.workbuddy.cn) 云端，获得固定公网链接，各端直接访问
+
+## 效果预览
+
+> 以下截图使用**演示数据**生成，仅用于展示界面效果。
+
+**桌面端（1440×2600 整页）**
+
+![桌面端效果](screenshots/dashboard-demo-desktop.png)
+
+**手机端（414×2200 整页）**
+
+![手机端效果](screenshots/dashboard-demo-mobile.png)
 
 ## 功能特性
 
@@ -5312,6 +5641,7 @@ SOFTWARE.
 
 ## 目录
 
+- [效果预览](#效果预览)
 - [技术栈](#技术栈)
 - [目录结构](#目录结构)
 - [快速开始](#快速开始)
@@ -5351,10 +5681,17 @@ gzh-data-dashboard/
 │   └── vendor/                   # 本地化的前端库
 │       ├── echarts.min.js
 │       └── xlsx.full.min.js
-└── workbuddy-deployment/         # 版本二：WorkBuddy 云端部署
-    ├── index.html                # 看板页面（与本地版同一份）
-    ├── server.py                 # 云端服务（静态资源 + 同步 API + 令牌鉴权）
-    └── vendor/
+├── workbuddy-deployment/         # 版本二：Python 单文件服务
+│   ├── index.html                # 看板页面（与本地版同一份）
+│   ├── server.py                 # 云端服务（静态资源 + 同步 API + 令牌鉴权）
+│   └── vendor/
+└── edgeone-deployment/           # 版本三：EdgeOne Pages（Serverless）
+    ├── index.html                # 看板页面（脱敏版，含页脚渲染脚本）
+    ├── package.json              # 函数依赖声明
+    ├── lib/                      # 函数共用代码（Blob / 令牌 / HTTP）
+    ├── edge-functions/           # 路由：/data.js 与 /api/*
+    ├── vendor/
+    └── README.md                 # EdgeOne 部署说明
 ```
 
 ## 快速开始
@@ -5391,11 +5728,29 @@ python3 server.py          # 本地预览（默认端口 3000，可用 PORT 环�
 
 首次部署后需要导入一份 `data.js`（由本地版采集生成，或在页面上传），数据格式见下文「数据结构」。
 
+### 版本三：EdgeOne Pages 部署（推荐，免服务器）
+
+不需要服务器、不需要自己管进程，静态前端与 API 全部跑在腾讯云 EdgeOne Pages 上，免费额度足够个人/单位日常使用。
+
+1. 把本仓库 fork 或 clone 到自己的 GitHub
+2. 在 EdgeOne Pages 控制台新建项目，关联该仓库，**根目录填 `edgeone-deployment`**
+3. 在项目设置里添加环境变量：
+   | 变量 | 必填 | 说明 |
+   | --- | --- | --- |
+   | `ADMIN_PWD` | ✅ | 管理密码；不配置则所有写操作被拒绝 |
+   | `FOOTER_TEXT` | 可选 | 页脚版权文案 |
+   | `GZH_STORE_NAME` | 可选 | Blob 存储名，默认 `gzh-data` |
+4. 首次部署后在页面「更新数据」里上传一次 `data.js`，数据会写入 Blob，之后所有设备共享
+
+数据不落在仓库里：`data.js` 与 `state.json` 都存在 EdgeOne Blob，仓库中不含任何真实统计数据。
+
+> 详细说明（路由规则、为什么用签名令牌、目录约定）见 [`edgeone-deployment/README.md`](edgeone-deployment/README.md)。
+
 ## 获取公众号凭据（AppID / AppSecret）
 
 本地版的自动采集需要调用微信公众平台官方接口，因此必须准备两个凭据：**AppID**（账号标识）与 **AppSecret**（接口密钥）。二者的关系可以理解成「账号 + 密码」——AppID 是公开的，AppSecret 等同于密码，**一旦泄露，他人就能以你的公众号身份调用接口**。
 
-只有本地部署版需要这两个凭据；WorkBuddy 部署版只做展示，不需要任何微信凭据。
+只有本地部署版需要这两个凭据；WorkBuddy 部署版与 EdgeOne Pages 版只做展示，不需要任何微信凭据。
 
 ### 前置条件
 
@@ -5551,6 +5906,12 @@ window.DATA = {
 
 **Q：如何更换管理密码？**
 线上版：设置环境变量 `ADMIN_PWD` 后重启服务。本地版：修改 `serve.py` 中 `ACCESS_PWD`；同时修改 `config.json` 的 `upstream_pwd`（用于本地推送线上时的鉴权）。
+
+**Q：如何在页面底部加版权/备案信息？**
+线上版支持注入页脚：设置环境变量 `FOOTER_TEXT` 后重启服务即可，例如
+`FOOTER_TEXT="© 2026 你的站名 丨 蜀ICP备XXXXXXXX号"`。
+页脚只由线上服务在返回网页时注入，`index.html` 本身不用改动（本地版与线上版共用同一份页面文件，本地访问不会出现页脚）。
+不设置该变量则不注入。
 
 **Q：采集时报 `40164 invalid ip not in whitelist` 怎么办？**
 说明运行采集的电脑公网 IP 没加进白名单。按提示中的 IP 去「设置与开发 → 基本配置 → IP白名单」添加即可，详见[第二步](#第二步配置-ip-白名单最容易踩的坑)。
